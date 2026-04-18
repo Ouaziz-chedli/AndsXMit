@@ -48,14 +48,14 @@ const MDS = () => {
         transition={{ delay: 0.4 }}
         className="grid md:grid-cols-2 gap-6 w-full"
       >
-        <div className="glass-card p-6 flex items-start gap-4 text-left opacity-60">
+        <div className="glass-card p-6 flex items-start gap-4 text-left ">
           <HardDrive className="w-8 h-8 text-gray-500 shrink-0" />
           <div>
             <h3 className="text-slate-900 dark:text-white  font-medium mb-1">Decentralized Storage</h3>
             <p className="text-sm dark:text-gray-400 text-slate-600">Ready for EHDS exchange architecture.</p>
           </div>
         </div>
-        <div className="glass-card p-6 flex items-start gap-4 text-left opacity-60">
+        <div className="glass-card p-6 flex items-start gap-4 text-left ">
           <Lock className="w-8 h-8 text-gray-500 shrink-0" />
           <div>
             <h3 className="text-slate-900 dark:text-white  font-medium mb-1">Advanced Anonymization</h3>

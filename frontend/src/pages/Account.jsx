@@ -132,7 +132,7 @@ const Account = () => {
           <div className="flex items-center gap-4 mb-6">
             <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center">
               {role === 'enterprise' ? <Building2 className="text-slate-900 dark:text-white" /> : <UserCircle className="text-slate-900 dark:text-white" />}
-            </div>
+            </div>  
             <div>
               <h3 className="text-lg font-semibold text-slate-900 dark:text-white capitalize">{role} Account</h3>
               <p className="text-sm dark:text-gray-400 text-slate-600">{user.email}</p>
