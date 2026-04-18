@@ -60,8 +60,6 @@ class PatientContext(BaseModel):
     mother_age: int                       # Age at due date
     gestational_age_weeks: float           # Weeks since LMP/conception
     # Optional modifiers
-    fetal_count: Literal[1, 2, 3] = 1    # Singleton/twin/triplet
-    ivf_conception: bool = False         # Assisted reproduction
     previous_affected_pregnancy: bool = False  # Prior chromosomal anomaly
 
     def to_mom(self) -> "PatientContextMoM":
@@ -77,8 +75,6 @@ class PatientContext(BaseModel):
             papp_a_mom=self.papp_a / MEDIAN_PAPP_A if self.papp_a else None,
             mother_age=self.mother_age,
             gestational_age_weeks=self.gestational_age_weeks,
-            fetal_count=self.fetal_count,
-            ivf_conception=self.ivf_conception,
             previous_affected_pregnancy=self.previous_affected_pregnancy,
         )
 
@@ -91,8 +87,6 @@ class PatientContextMoM(BaseModel):
     papp_a_mom: float | None = None
     mother_age: int
     gestational_age_weeks: float
-    fetal_count: Literal[1, 2, 3] = 1
-    ivf_conception: bool = False
     previous_affected_pregnancy: bool = False
 
 
