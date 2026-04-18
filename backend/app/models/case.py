@@ -9,6 +9,22 @@ class ImageData(BaseModel):
     format: Literal["dicom", "jpeg", "png"]
 
 
+class BPDMeasurement(BaseModel):
+    """BPD measurement with computed centile and size assessment."""
+    bpd_mm: float
+    gestational_age_weeks: int
+    centile: Optional[str] = None  # "5th", "50th", "95th", or None if GA invalid
+    size_category: Optional[Literal["small", "average", "large"]] = None
+    head_shape_warning: Optional[bool] = None
+
+
+class BiometricContext(BaseModel):
+    """Biometric measurements for fetal assessment."""
+    bpd: Optional[float] = None  # BPD in mm
+    head_circumference: Optional[float] = None  # HC in mm
+    cephalic_index: Optional[float] = None  # BPD/OFD ratio
+
+
 class DiseaseCase(BaseModel):
     case_id: str
     disease_id: str
@@ -29,6 +45,7 @@ class DiseaseCase(BaseModel):
     acquisition_params: Optional[dict] = None
 
     patient_context: Optional[PatientContext] = None
+    biometric_context: Optional[BiometricContext] = None
 
     source_institution: str = ""
     diagnosing_physician: str = ""

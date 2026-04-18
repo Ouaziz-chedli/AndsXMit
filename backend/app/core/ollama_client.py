@@ -117,16 +117,23 @@ class OllamaClient:
 
         Returns:
             Embedding vector
+
+        Raises:
+            httpx.HTTPError: If Ollama fails and no fallback is available
         """
-        response = await self.client.post(
-            f"{self.base_url}/api/embeddings",
-            json={
-                "model": self.model,
-                "prompt": text,
-            },
-        )
-        response.raise_for_status()
-        return response.json()["embedding"]
+        try:
+            response = await self.client.post(
+                f"{self.base_url}/api/embeddings",
+                json={
+                    "model": self.model,
+                    "prompt": text,
+                },
+            )
+            response.raise_for_status()
+            return response.json()["embedding"]
+        except (httpx.HTTPError, httpx.TimeoutException) as e:
+            # Ollama embedding failed - caller should handle fallback
+            raise
 
     async def close(self) -> None:
         """Close the HTTP client."""

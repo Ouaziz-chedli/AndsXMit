@@ -24,7 +24,7 @@ from app.core.vector_store import VectorStore, StoredCase
 from app.core.medgemma import get_medgemma
 
 
-def load_mock_cases(file_path: str) -> Dict:
+def load_mock_data(file_path: str) -> Dict:
     """
     Load mock cases from a JSON file.
 
@@ -166,12 +166,12 @@ def main():
     )
     parser.add_argument(
         "--data-dir",
-        default="/home/ali/HACK_MED_PARIS_MIT/AndsXMit/data/mock_cases",
+        default=str(Path(__file__).parent.parent / "data" / "mock_cases"),
         help="Directory containing mock case JSON files"
     )
     parser.add_argument(
         "--chroma-path",
-        default="/home/ali/HACK_MED_PARIS_MIT/AndsXMit/data/vector_db",
+        default="/data/vector_db",
         help="Path to ChromaDB persistent storage"
     )
     parser.add_argument(

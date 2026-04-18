@@ -8,6 +8,8 @@ This package contains the core AI/ML functionality:
 - Aggregation: Trimester-weighted scores
 - Priors: Bayesian prior calculations
 - Image Processor: DICOM/JPEG/PNG handling
+- Fetal Measurements: BPD centile lookup and size assessment
+- Biometric Context: AI prompt fragment builder
 """
 
 from .medgemma import (
@@ -63,6 +65,22 @@ from .image_processor import (
     validate_image,
 )
 
+from .fetal_measurements import (
+    get_bpd_reference,
+    get_bpd_centile,
+    compute_size_assessment,
+    check_head_shape,
+    BPDReference,
+    BPDCentileResult,
+    SizeAssessment,
+    HeadShapeResult,
+)
+
+from .biometric_context import (
+    compute_biometric_context,
+    build_biometric_prompt,
+)
+
 __all__ = [
     # MedGemma
     "MedGemma",
@@ -99,4 +117,16 @@ __all__ = [
     "anonymize_dicom",
     "get_image_format",
     "validate_image",
+    # Fetal Measurements
+    "get_bpd_reference",
+    "get_bpd_centile",
+    "compute_size_assessment",
+    "check_head_shape",
+    "BPDReference",
+    "BPDCentileResult",
+    "SizeAssessment",
+    "HeadShapeResult",
+    # Biometric Context
+    "compute_biometric_context",
+    "build_biometric_prompt",
 ]

@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import Navbar from './components/Navbar';
+import DebugPanel from './components/DebugPanel';
 import Home from './pages/Home';
 import Strategy from './pages/Strategy';
 import Chat from './pages/Chat';
@@ -27,7 +28,7 @@ function App() {
     <BrowserRouter>
       <div className="min-h-screen flex flex-col overflow-x-hidden relative dark:bg-background bg-slate-50 transition-colors duration-300">
         <Navbar theme={theme} toggleTheme={toggleTheme} />
-        
+
         <main className="flex-1 flex flex-col w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 z-10">
           <Routes>
             <Route path="/" element={<Home />} />
@@ -39,6 +40,8 @@ function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
+
+        <DebugPanel />
       </div>
     </BrowserRouter>
   );

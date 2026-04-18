@@ -24,6 +24,7 @@ import httpx
 
 from .image_processor import load_ultrasound_image, image_to_bytes
 from .ollama_client import get_ollama_client, OllamaClient
+from .biometric_context import compute_biometric_context
 
 
 def detect_device() -> str:
@@ -222,6 +223,7 @@ class MedGemma:
         image_bytes: bytes,
         trimester: str,
         gestational_age_weeks: Optional[float] = None,
+        biometric_context: Optional[dict] = None,
     ) -> SymptomDescription:
         """
         Async internal method to perform analysis on image bytes.
@@ -230,6 +232,7 @@ class MedGemma:
             image_bytes: Image data as bytes
             trimester: Trimester context
             gestational_age_weeks: Optional gestational age
+            biometric_context: Optional biometric context dict from compute_biometric_context()
 
         Returns:
             SymptomDescription with extracted symptoms
@@ -240,10 +243,14 @@ class MedGemma:
         client = self._get_client()
 
         # Build context-aware prompt
-        context = f"Trimester: {trimester}"
+        context_parts = [f"Trimester: {trimester}"]
         if gestational_age_weeks:
-            context += f", Gestational age: {gestational_age_weeks} weeks"
+            context_parts.append(f"Gestational age: {gestational_age_weeks} weeks")
+        # Inject biometric context when available
+        if biometric_context and biometric_context.get("ai_prompt_fragment"):
+            context_parts.append(biometric_context["ai_prompt_fragment"])
 
+        context = "; ".join(context_parts)
         prompt = f"{SYMPTOM_EXTRACTION_PROMPT}\n\nContext: {context}"
 
         try:
@@ -270,6 +277,7 @@ class MedGemma:
         self,
         image_path: str,
         user_provided_trimester: Optional[str] = None,
+        biometric_context: Optional[dict] = None,
     ) -> SymptomDescription:
         """
         Extract symptoms from an ultrasound image file.
@@ -277,6 +285,7 @@ class MedGemma:
         Args:
             image_path: Path to the ultrasound image (DICOM, JPEG, PNG)
             user_provided_trimester: Optional trimester override ("1st", "2nd", "3rd")
+            biometric_context: Optional biometric context dict from compute_biometric_context()
 
         Returns:
             SymptomDescription with extracted symptoms
@@ -300,13 +309,14 @@ class MedGemma:
         # Convert image to bytes
         image_bytes = image_to_bytes(image, format="PNG")
 
-        return self._analyze(image_bytes, trimester, metadata.gestational_age_weeks)
+        return self._analyze(image_bytes, trimester, metadata.gestational_age_weeks, biometric_context)
 
     def extract_symptoms_from_bytes(
         self,
         image_bytes: bytes,
         trimester: str,
         gestational_age_weeks: Optional[float] = None,
+        biometric_context: Optional[dict] = None,
     ) -> SymptomDescription:
         """
         Extract symptoms from image bytes.
@@ -315,17 +325,19 @@ class MedGemma:
             image_bytes: Image data as bytes (PNG format recommended)
             trimester: Trimester ("1st", "2nd", "3rd")
             gestational_age_weeks: Optional gestational age in weeks
+            biometric_context: Optional biometric context dict from compute_biometric_context()
 
         Returns:
             SymptomDescription with extracted symptoms
         """
         self._ensure_loaded()
-        return self._analyze(image_bytes, trimester, gestational_age_weeks)
+        return self._analyze(image_bytes, trimester, gestational_age_weeks, biometric_context)
 
     async def extract_symptoms_async(
         self,
         image_path: str,
         user_provided_trimester: Optional[str] = None,
+        biometric_context: Optional[dict] = None,
     ) -> SymptomDescription:
         """
         Async: Extract symptoms from an ultrasound image file.
@@ -333,6 +345,7 @@ class MedGemma:
         Args:
             image_path: Path to the ultrasound image (DICOM, JPEG, PNG)
             user_provided_trimester: Optional trimester override ("1st", "2nd", "3rd")
+            biometric_context: Optional biometric context dict from compute_biometric_context()
 
         Returns:
             SymptomDescription with extracted symptoms
@@ -345,13 +358,14 @@ class MedGemma:
                 "Trimester must be provided or extractable from image metadata."
             )
         image_bytes = image_to_bytes(image, format="PNG")
-        return await self._analyze_async(image_bytes, trimester, metadata.gestational_age_weeks)
+        return await self._analyze_async(image_bytes, trimester, metadata.gestational_age_weeks, biometric_context)
 
     async def extract_symptoms_from_bytes_async(
         self,
         image_bytes: bytes,
         trimester: str,
         gestational_age_weeks: Optional[float] = None,
+        biometric_context: Optional[dict] = None,
     ) -> SymptomDescription:
         """
         Async: Extract symptoms from image bytes.
@@ -360,18 +374,20 @@ class MedGemma:
             image_bytes: Image data as bytes (PNG format recommended)
             trimester: Trimester ("1st", "2nd", "3rd")
             gestational_age_weeks: Optional gestational age in weeks
+            biometric_context: Optional biometric context dict from compute_biometric_context()
 
         Returns:
             SymptomDescription with extracted symptoms
         """
         self._ensure_loaded()
-        return await self._analyze_async(image_bytes, trimester, gestational_age_weeks)
+        return await self._analyze_async(image_bytes, trimester, gestational_age_weeks, biometric_context)
 
     def _analyze(
         self,
         image_bytes: bytes,
         trimester: str,
         gestational_age_weeks: Optional[float] = None,
+        biometric_context: Optional[dict] = None,
     ) -> SymptomDescription:
         """
         Internal method to perform analysis on image bytes.
@@ -379,7 +395,7 @@ class MedGemma:
         Runs async analysis in a thread pool when called from within a running
         event loop (e.g. FastAPI handlers), so asyncio.run() is never nested.
         """
-        coro = self._analyze_async(image_bytes, trimester, gestational_age_weeks)
+        coro = self._analyze_async(image_bytes, trimester, gestational_age_weeks, biometric_context)
         try:
             asyncio.get_running_loop()
             # We are inside a running loop — delegate to a worker thread
@@ -597,6 +613,7 @@ def reset_medgemma() -> None:
 async def extract_symptoms(
     image_path: str,
     user_provided_trimester: Optional[str] = None,
+    biometric_context: Optional[dict] = None,
 ) -> SymptomDescription:
     """
     Async: Convenience function to extract symptoms from an image.
@@ -604,19 +621,21 @@ async def extract_symptoms(
     Args:
         image_path: Path to the ultrasound image
         user_provided_trimester: Optional trimester override
+        biometric_context: Optional biometric context dict from compute_biometric_context()
 
     Returns:
         SymptomDescription with extracted symptoms
     """
     medgemma = get_medgemma()
     medgemma._ensure_loaded()
-    return await medgemma.extract_symptoms_async(image_path, user_provided_trimester)  # noqa: now correctly defined
+    return await medgemma.extract_symptoms_async(image_path, user_provided_trimester, biometric_context)
 
 
 async def extract_symptoms_from_bytes(
     image_bytes: bytes,
     trimester: str,
     gestational_age_weeks: Optional[float] = None,
+    biometric_context: Optional[dict] = None,
 ) -> SymptomDescription:
     """
     Async: Convenience function to extract symptoms from image bytes.
@@ -625,6 +644,7 @@ async def extract_symptoms_from_bytes(
         image_bytes: Image data as bytes
         trimester: Trimester
         gestational_age_weeks: Optional gestational age
+        biometric_context: Optional biometric context dict from compute_biometric_context()
 
     Returns:
         SymptomDescription with extracted symptoms
@@ -632,5 +652,5 @@ async def extract_symptoms_from_bytes(
     medgemma = get_medgemma()
     medgemma._ensure_loaded()
     return await medgemma.extract_symptoms_from_bytes_async(
-        image_bytes, trimester, gestational_age_weeks
+        image_bytes, trimester, gestational_age_weeks, biometric_context
     )

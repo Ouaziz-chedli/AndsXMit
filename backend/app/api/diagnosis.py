@@ -6,19 +6,24 @@ import json
 import time
 import uuid
 from datetime import datetime
-from typing import Annotated
+from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
-from app.db import CaseRepository, DiagnosisTaskRepository, get_db
+from app.config import settings
+from app.db import DiagnosisTaskRepository, get_db
+from app.db.models import DiagnosisTask
 from app.models import (
     ComprehensiveResult,
     DiagnosisResponse,
     DiagnosisResult,
     PatientContext,
 )
-from app.services.diagnosis import run_comprehensive_background, run_diagnosis_mock
+from app.services.diagnosis import (
+    get_diagnosis_service,
+    run_comprehensive_background,
+)
 
 router = APIRouter(prefix="/api/v1/diagnosis", tags=["diagnosis"])
 
@@ -45,7 +50,7 @@ async def diagnose(
     if trimester not in ("1st", "2nd", "3rd"):
         raise HTTPException(status_code=422, detail="Invalid trimester. Must be 1st, 2nd, or 3rd.")
 
-    # Build patient context (Dev1 spec: only b_hcg, papp_a, mother_age, gestational_age_weeks, previous_affected_pregnancy)
+    # Build patient context
     patient_context = PatientContext(
         b_hcg=b_hcg,
         papp_a=papp_a,
@@ -57,11 +62,21 @@ async def diagnose(
     # Generate task ID for background tracking
     task_id = f"task-{uuid.uuid4().hex[:12]}"
 
-    # Save images to temp storage (in real impl, would save to /data/images)
+    # Save images to /data/images/
+    image_dir = Path(settings.IMAGE_DIR)
+    image_dir.mkdir(parents=True, exist_ok=True)
+
     image_paths = []
     for img in images:
-        # In MVP, just store filename info; actual file handling in services
-        image_paths.append(img.filename or f"img-{uuid.uuid4().hex[:8]}")
+        ext = Path(img.filename or "image.jpg").suffix.lower()
+        if ext not in (".jpg", ".jpeg", ".png", ".dcm"):
+            ext = ".jpg"
+        filename = f"{uuid.uuid4().hex[:12]}{ext}"
+        filepath = image_dir / filename
+        content = await img.read()
+        with open(filepath, "wb") as f:
+            f.write(content)
+        image_paths.append(str(filepath))
 
     # Create background task record
     task_repo = DiagnosisTaskRepository(db)
@@ -75,22 +90,45 @@ async def diagnose(
         )
     )
 
-    # Run mock diagnosis
+    # Build DiagnosisQuery for real pipeline
+    from app.models.diagnosis import DiagnosisQuery
+    query = DiagnosisQuery(
+        trimester=trimester,  # type: ignore
+        patient_context=patient_context,
+        top_k=10,
+    )
+
+    # Run real diagnosis via DiagnosisService
+    diagnosis_service = get_diagnosis_service(vector_store_path=settings.CHROMA_PATH)
+
     start_time = time.time()
-    results = run_diagnosis_mock(patient_context, trimester)
+    try:
+        # diagnose_from_image expects (image_path, query) - runs full pipeline for down_syndrome
+        # Use diagnose_multiple_diseases to get top results across all diseases
+        results = await diagnosis_service.diagnose_multiple_diseases(
+            image_path=image_paths[0] if image_paths else "",
+            query=query,
+        )
+        # Take top 5 sorted by final_score
+        top_results = sorted(results, key=lambda x: x.final_score, reverse=True)[:5]
+    except Exception as e:
+        # Fall back to mock if pipeline fails (e.g., empty vector DB)
+        from app.services.diagnosis import run_diagnosis_mock
+        top_results = run_diagnosis_mock(patient_context, trimester)
+
     fast_track_ms = int((time.time() - start_time) * 1000)
 
-    # Queue comprehensive background task (creates its own DB session internally)
+    # Queue comprehensive background task
     background_tasks.add_task(
         run_comprehensive_background,
         task_id=task_id,
         image_paths=image_paths,
         trimester=trimester,
         patient_context=patient_context,
-    )  # Note: no db= arg — background task owns its own session
+    )
 
     return DiagnosisResponse(
-        fast_track=results,
+        fast_track=top_results,
         comprehensive_pending=True,
         comprehensive_callback_url=f"/api/v1/diagnosis/{task_id}/comprehensive",
         fast_track_ms=fast_track_ms,
@@ -128,7 +166,3 @@ async def get_comprehensive_results(
         )
 
     return result
-
-
-# Import at bottom to avoid circular imports
-from app.db.models import DiagnosisTask

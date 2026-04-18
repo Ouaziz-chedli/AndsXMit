@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LogIn, Key, Mail, User, Phone, Building, Component } from 'lucide-react';
-import { buildApiUrl } from '../lib/api';
+import { apiClient } from '../lib/apiClient';
+import logger from '../lib/logger';
 
 const InputField = ({ label, icon: Icon, type = "text", ...props }) => (
   <div>
@@ -24,22 +25,22 @@ const InputField = ({ label, icon: Icon, type = "text", ...props }) => (
 const Login = () => {
   const [isRegister, setIsRegister] = useState(false);
   const [role, setRole] = useState('personal'); // 'personal' or 'enterprise'
-  
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  
+
   // Personal specific
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('');
-  
+
   // Enterprise specific
   const [managerFirstName, setManagerFirstName] = useState('');
   const [managerLastName, setManagerLastName] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [companyType, setCompanyType] = useState('private'); // 'private' or 'public'
-  
+
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -50,57 +51,58 @@ const Login = () => {
       setError('Les mots de passe ne correspondent pas.');
       return;
     }
-    
+
     setLoading(true);
     setError('');
 
-    try {
-      const endpoint = isRegister ? '/api/auth/register' : '/api/auth/login';
-      
-      const payload = isRegister ? {
-        email,
-        password,
-        role,
-        ...(role === 'personal' ? { firstName, lastName, phone } : { managerFirstName, managerLastName, companyName, companyType })
-      } : {
-        email,
-        password
-      };
+    const endpoint = isRegister ? '/api/auth/register' : '/api/auth/login';
+    const namespace = 'Auth';
 
-      const res = await fetch(buildApiUrl(endpoint), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-      
-      if (res.ok) {
+    const payload = isRegister ? {
+      email,
+      password,
+      role,
+      ...(role === 'personal' ? { firstName, lastName, phone } : { managerFirstName, managerLastName, companyName, companyType })
+    } : {
+      email,
+      password
+    };
+
+    logger.info(namespace, `Attempting ${isRegister ? 'registration' : 'login'}`, { email, role });
+
+    try {
+      const response = await apiClient.post(endpoint, payload);
+
+      if (response.ok) {
+        logger.info(namespace, 'Authentication successful', { status: response.status });
+
         if (isRegister) {
           // Auto-login after register
-          const loginRes = await fetch(buildApiUrl('/api/auth/login'), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password })
-          });
-          
-          if (loginRes.ok) {
-            const loginData = await loginRes.json();
-            localStorage.setItem('token', loginData.access_token);
-            localStorage.setItem('role', loginData.role);
+          const loginResponse = await apiClient.post('/api/auth/login', { email, password });
+
+          if (loginResponse.ok) {
+            logger.info(namespace, 'Auto-login after registration successful');
+            localStorage.setItem('token', loginResponse.data.access_token);
+            localStorage.setItem('role', loginResponse.data.role);
             navigate('/account');
           } else {
+            logger.warn(namespace, 'Auto-login failed, showing login form', { status: loginResponse.status });
             setIsRegister(false);
             setError('Compte créé, mais erreur de connexion automatique.');
           }
         } else {
-          localStorage.setItem('token', data.access_token);
-          localStorage.setItem('role', data.role);
+          localStorage.setItem('token', response.data.access_token);
+          localStorage.setItem('role', response.data.role);
+          logger.info(namespace, 'Login successful, redirecting to account');
           navigate('/account');
         }
       } else {
-        setError(data.detail || (isRegister ? "Erreur lors de l'inscription" : 'Erreur de connexion'));
+        const errorMessage = response.data?.detail || (isRegister ? "Erreur lors de l'inscription" : 'Erreur de connexion');
+        logger.warn(namespace, 'Authentication failed', { status: response.status, detail: response.data?.detail });
+        setError(errorMessage);
       }
     } catch (err) {
+      logger.error(namespace, 'Network error during authentication', { error: err.message });
       setError('Impossible de joindre le serveur.');
     } finally {
       setLoading(false);
@@ -109,7 +111,7 @@ const Login = () => {
 
   return (
     <div className="min-h-[80vh] flex items-center justify-center py-10">
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="w-full max-w-md"
@@ -123,7 +125,7 @@ const Login = () => {
           </div>
 
           <form onSubmit={handleAuth} className="space-y-4">
-            
+
             {/* Role selector for Register */}
             {isRegister && (
               <div className="flex p-1 space-x-1 glass rounded-xl mb-6">
@@ -133,7 +135,7 @@ const Login = () => {
                     type="button"
                     onClick={() => setRole(r)}
                     className={`w-full rounded-lg py-2 text-sm font-medium transition-all ${
-                      role === r 
+                      role === r
                         ? 'bg-primary text-white shadow'
                         : 'text-slate-600 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white'
                     }`}
@@ -158,7 +160,7 @@ const Login = () => {
               {isRegister && role === 'enterprise' && (
                 <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="space-y-4">
                   <InputField label="Nom de l'entreprise" icon={Building} value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="Clinique Pasteur" />
-                  
+
                   <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-1">Type d'entreprise</label>
                     <select
@@ -180,35 +182,35 @@ const Login = () => {
             </AnimatePresence>
 
             {/* Email - Used in both Login & Register */}
-            <InputField 
-              label={isRegister && role === 'enterprise' ? "Email de l'entreprise" : "Email"} 
-              icon={Mail} 
-              type="email" 
-              value={email} 
-              onChange={e => setEmail(e.target.value)} 
-              placeholder={isRegister && role === 'enterprise' ? "contact@entreprise.com" : "email@exemple.com"} 
+            <InputField
+              label={isRegister && role === 'enterprise' ? "Email de l'entreprise" : "Email"}
+              icon={Mail}
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder={isRegister && role === 'enterprise' ? "contact@entreprise.com" : "email@exemple.com"}
             />
 
             {/* Password - Used in both Login & Register */}
-            <InputField 
-              label="Mot de passe" 
-              icon={Key} 
-              type="password" 
-              value={password} 
-              onChange={e => setPassword(e.target.value)} 
-              placeholder="••••••••" 
+            <InputField
+              label="Mot de passe"
+              icon={Key}
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="••••••••"
             />
 
             {/* Confirm Password - Only Register */}
             {isRegister && (
               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
-                <InputField 
-                  label="Vérification du mot de passe" 
-                  icon={Key} 
-                  type="password" 
-                  value={confirmPassword} 
-                  onChange={e => setConfirmPassword(e.target.value)} 
-                  placeholder="••••••••" 
+                <InputField
+                  label="Vérification du mot de passe"
+                  icon={Key}
+                  type="password"
+                  value={confirmPassword}
+                  onChange={e => setConfirmPassword(e.target.value)}
+                  placeholder="••••••••"
                 />
               </motion.div>
             )}
@@ -226,7 +228,7 @@ const Login = () => {
             >
               {loading ? (isRegister ? 'Inscription...' : 'Connexion...') : (isRegister ? "S'inscrire" : 'Se connecter')}
             </button>
-            
+
             <div className="text-center mt-4">
               <button
                 type="button"

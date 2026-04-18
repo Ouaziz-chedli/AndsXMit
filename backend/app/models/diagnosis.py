@@ -2,6 +2,7 @@ from pydantic import BaseModel
 from typing import List, Optional, Literal, Tuple
 from datetime import datetime
 from .patient import PatientContext
+from .case import BiometricContext
 
 
 class Symptom(BaseModel):
@@ -35,6 +36,7 @@ class DiagnosisResult(BaseModel):
 class DiagnosisQuery(BaseModel):
     trimester: Literal["1st", "2nd", "3rd"]
     patient_context: PatientContext
+    biometric_context: Optional[BiometricContext] = None
     top_k: int = 10
 
 

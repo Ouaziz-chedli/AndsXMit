@@ -65,7 +65,7 @@ async def process_case_upload(
     1. Save images to /data/images/
     2. Anonymize any DICOM metadata
     3. Create CommunityCase record
-    4. Trigger embedding computation (future)
+    4. Trigger embedding computation and store in ChromaDB
     """
     # Ensure image directory exists
     image_dir = Path(settings.IMAGE_DIR)
@@ -89,6 +89,9 @@ async def process_case_upload(
 
         saved_paths.append(str(filepath))
 
+    # Determine label from outcome
+    label = "positive" if outcome == "positive" else "negative" if outcome == "negative" else "negative"
+
     # Create case record
     case = CommunityCase(
         case_id=f"case-{uuid.uuid4().hex[:12]}",
@@ -109,9 +112,52 @@ async def process_case_upload(
     case_repo = CaseRepository(db)
     case = case_repo.create(case)
 
-    # TODO: Trigger embedding computation in background
+    # Trigger embedding computation in background (non-blocking)
+    import asyncio
+    asyncio.create_task(_trigger_embedding(
+        case_id=case.case_id,
+        disease_id=disease_id or "unknown",
+        trimester=trimester,
+        label=label,
+        image_paths=saved_paths,
+        symptom_text=diagnosis,
+        gestational_age_weeks=gestational_age_weeks,
+        b_hcg_mom=b_hcg_mom,
+        papp_a_mom=papp_a_mom,
+    ))
 
     return case
+
+
+async def _trigger_embedding(
+    case_id: str,
+    disease_id: str,
+    trimester: str,
+    label: str,
+    image_paths: List[str],
+    symptom_text: str,
+    gestational_age_weeks: float | None,
+    b_hcg_mom: float | None,
+    papp_a_mom: float | None,
+) -> None:
+    """
+    Background task: compute embedding and store in ChromaDB.
+    """
+    case_data = UploadedCaseData(
+        disease_id=disease_id,
+        trimester=trimester,
+        label=label,
+        images=image_paths,
+        symptom_text=symptom_text,
+        gestational_age_weeks=gestational_age_weeks,
+        b_hcg=b_hcg_mom * 1500.0 if b_hcg_mom else None,  # Convert MoM back to raw
+        papp_a=papp_a_mom * 1500.0 if papp_a_mom else None,
+        contributor_id=None,
+    )
+    try:
+        await process_case_upload_to_vector_store(case_data)
+    except Exception as e:
+        print(f"[CaseUpload] Embedding failed for {case_id}: {e}")
 
 
 async def process_case_upload_to_vector_store(

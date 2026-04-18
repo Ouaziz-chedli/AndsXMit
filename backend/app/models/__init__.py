@@ -2,7 +2,7 @@
 
 from .patient import PatientContext, PatientContextMoM
 from .disease import Disease, TrimesterProfile
-from .case import DiseaseCase, ImageData
+from .case import DiseaseCase, ImageData, BPDMeasurement, BiometricContext
 from .diagnosis import (
     Symptom,
     SymptomDescription,
@@ -24,6 +24,8 @@ __all__ = [
     # Case
     "DiseaseCase",
     "ImageData",
+    "BPDMeasurement",
+    "BiometricContext",
     # Diagnosis
     "Symptom",
     "SymptomDescription",

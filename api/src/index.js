@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const { createProxyMiddleware } = require('http-proxy-middleware');
+const { loggerMiddleware, errorLogger, requestIdMiddleware } = require('./middleware/logger');
 const authRoutes = require('./routes/auth.js');
 const userRoutes = require('./routes/user.js');
 
@@ -9,8 +10,23 @@ dotenv.config();
 
 const app = express();
 
+// Request ID for all requests
+app.use(requestIdMiddleware);
+
+// CORS
 app.use(cors());
-app.use(express.json());
+
+// Body parsing
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true }));
+
+// Request logging (skip health checks)
+app.use((req, res, next) => {
+  if (req.path === '/health' || req.path === '/api/health') {
+    return next();
+  }
+  loggerMiddleware(req, res, next);
+});
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -24,6 +40,24 @@ app.use(
     target: BACKEND_URL,
     changeOrigin: true,
     pathRewrite: (path) => `/api/v1${path}`,
+    onProxyReq: (proxyReq, req) => {
+      if (process.env.DEBUG === 'true') {
+        console.log(`[PROXY] ${req.method} ${req.originalUrl} -> ${BACKEND_URL}${proxyReq.path}`);
+      }
+      // Pass request ID to backend
+      if (req.requestId) {
+        proxyReq.setHeader('X-Request-ID', req.requestId);
+      }
+    },
+    onProxyRes: (proxyRes, req) => {
+      if (process.env.DEBUG === 'true') {
+        console.log(`[PROXY] Response ${proxyRes.statusCode} for ${req.method} ${req.originalUrl}`);
+      }
+    },
+    onError: (err, req, res) => {
+      console.error(`[PROXY] Error: ${err.message}`);
+      res.status(502).json({ error: 'Proxy error', detail: err.message });
+    },
   })
 );
 
@@ -55,13 +89,30 @@ app.use(
   })
 );
 
-// General Error Handler
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ detail: 'Something broke!' });
+// Debug endpoint - returns environment info
+app.get('/api/debug', (req, res) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(404).json({ error: 'Not found' });
+  }
+
+  res.json({
+    environment: process.env.NODE_ENV || 'development',
+    debug: process.env.DEBUG === 'true',
+    logLevel: process.env.LOG_LEVEL || 'info',
+    timestamp: new Date().toISOString(),
+    requestId: req.requestId,
+    uptime: process.uptime(),
+    memory: process.memoryUsage(),
+  });
 });
+
+// General Error Handler - must be last
+app.use(errorLogger);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Server running securely on port ${PORT}`);
+  console.log(`\n🚀 Server running on port ${PORT}`);
+  console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`   Debug: ${process.env.DEBUG === 'true' ? 'ON' : 'OFF'}`);
+  console.log(`   Log Level: ${process.env.LOG_LEVEL || 'info'}\n`);
 });
