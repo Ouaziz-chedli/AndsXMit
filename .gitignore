@@ -1,5 +1,46 @@
-*
-!.gitignore
+# PrenatalAI Project
+
+# Exclude BMAD/Cline artifacts
+.opencode/
+.claude/
+.cursor/
+_bmad/
+!_bmad-output/
+CLAUDE.md
+
+# Keep project files
 !README.md
-!docs
+!AGENTS.md
+!docs/
 !docs/*
+
+# Python / Django
+__pycache__/
+*.py[cod]
+*.so
+.Python
+.env
+.venv/
+venv/
+ENV/
+*.sqlite3
+*.db
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data directories (runtime data)
+data/
+*.log

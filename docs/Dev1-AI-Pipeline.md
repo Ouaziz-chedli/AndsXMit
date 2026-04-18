@@ -18,7 +18,7 @@ Complexity is only justified when it directly serves this goal. If a simpler too
 |------|--------------|-----------|
 | Vector storage | **ChromaDB embedded** (`PersistentClient`, writes to disk) | ChromaDB server container |
 | AI inference | **MedGemma local** (mandatory) | MedGemma API — breaks self-hosting |
-
+ 
 ### Target Deployment
 
 ```
