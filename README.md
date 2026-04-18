@@ -15,6 +15,7 @@
 7. [Technology Philosophy](#technology-philosophy)
 8. [Risks & Concerns](#risks--concerns)
 9. [Vision & Goals](#vision--goals)
+10. [Technology Stack](#technology-stack)
 
 ---
 
@@ -264,6 +265,8 @@ final_disease_score = weighted_score × prior_multiplier
                     = 0.44 × 1.5 = 0.66
 ```
 
+**Dynamic Threshold Learning**: Instead of fixed thresholds (e.g., "age > 35"), the system learns optimal biomarker thresholds from community cases with confirmed outcomes. When enough data accumulates, the system discovers that age > 32.5 combined with low PAPP-A is more predictive than age alone — and updates thresholds automatically.
+
 **Step 4: Symptom Overlap Handling**
 
 When one symptom suggests multiple diseases:
@@ -462,6 +465,86 @@ Beyond images, the system incorporates patient context to adjust probabilities:
 
 These parameters act as **Bayesian priors** — they adjust the baseline probability before the AI even analyzes the image.
 
+### 6. Adaptive Threshold Learning
+
+Traditional medicine uses fixed thresholds (e.g., "PAPP-A < 0.5 MoM = high risk") derived from historical studies. **Our system learns dynamic thresholds from community data** — discovering which parameter values actually predict disease in real-world cases.
+
+#### The Problem with Fixed Thresholds
+
+- Thresholds are often set conservatively (to minimize false negatives)
+- They don't adapt to population differences
+- They can't discover new correlations between biomarkers and disease
+
+#### Our Solution: Outcome-Based Threshold Discovery
+
+```
+1. Collect community cases with:
+   - Patient biomarkers (age, PAPP-A, HCG, etc.)
+   - Confirmed pregnancy outcome (diseased vs healthy)
+
+2. For each parameter, the system discovers:
+   - Optimal threshold: value that best separates diseased from healthy
+   - Confidence band: range where threshold is statistically valid
+   - Interaction effects: how parameters combine (e.g., age + PAPP-A together)
+
+3. Example learned thresholds:
+   - Maternal age > 32.5 (not 35!) + low PAPP-A → higher risk than either alone
+   - HCG doublet rate > 1.8x baseline at week 10 → correlation with chromosomal
+   - Combined biomarker panels outperform single markers
+
+4. Update continuously as new confirmed cases are uploaded
+```
+
+#### Dynamic vs Fixed Thresholds
+
+| Aspect | Fixed Thresholds | Adaptive Learning |
+|--------|------------------|-------------------|
+| **Source** | Historical studies | Community outcome data |
+| **Update frequency** | Static | Continuous |
+| **Population adaptation** | None | Cohort-specific |
+| **Interaction detection** | Manual | Automated |
+| **False positive rate** | High (conservative) | Optimized per use case |
+
+#### Threshold Learning Process
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                  THRESHOLD LEARNING PIPELINE                 │
+│                                                             │
+│  1. DATA COLLECTION                                          │
+│     └── Confirmed outcomes (diseased/healthy) + biomarkers   │
+│                                                             │
+│  2. FEATURE ANALYSIS                                         │
+│     └── Age, PAPP-A, HCG, NT, combinations                 │
+│                                                             │
+│  3. OPTIMAL THRESHOLD DISCOVERY                              │
+│     └── ML model finds best separation points              │
+│     └── Validates against holdout cases                     │
+│                                                             │
+│  4. CONFIDENCE SCORING                                       │
+│     └── How reliable is this threshold?                    │
+│     └── Based on sample size + statistical significance    │
+│                                                             │
+│  5. DEPLOYMENT TO AGGREGATION LAYER                          │
+│     └── Dynamic thresholds replace static rules             │
+│     └── Doctor sees: "Learned threshold: 32.5yo (vs 35)"    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### Discovery Bonus: New Diagnostic Correlations
+
+A powerful side effect of threshold learning: **the system can discover that parameters previously thought unrelated to ultrasound diseases actually ARE correlated**.
+
+```
+Example:
+- Input: Patient age 38, PAPP-A 0.3 MoM, HCG 1.9 MoM
+- Discovery: These three markers together predict cardiac defect
+- Validation: 47 community cases confirm pattern
+- Result: New non-ultrasound predictor for cardiac disease!
+```
+
+This transforms the platform from **diagnosing what we know** to **discovering what we don't yet know**.
+
 ---
 
 ## French Prenatal Ultrasound Context
@@ -612,6 +695,7 @@ The architecture is well-designed conceptually. The main risk is MedGemma's appl
 - [ ] Partnership with hospitals for clinical validation
 - [ ] Integration with hospital PACS systems
 - [ ] Discovery of new ultrasound markers for unknown diseases
+- [ ] **Learned biomarker thresholds** from community outcome data
 - [ ] Global community of contributing physicians
 - [ ] Reduction in unnecessary invasive procedures worldwide
 
@@ -679,6 +763,7 @@ This document represents the initial vision and design decisions. The project is
 ### What's Needed
 - 🔲 MedGemma integration testing with ultrasound images
 - 🔲 Vector database implementation
+- 🔲 Threshold learning model (adaptive biomarker thresholds)
 - 🔲 Prototype UI/UX
 - 🔲 Mock community upload flow
 - 🔲 Clinical partnership discussions
@@ -711,6 +796,7 @@ This project is in early development. If you're interested in contributing:
 | **Vision-Language AI** | MedGemma (Google DeepMind) | Symptom extraction from ultrasounds |
 | **Vector Database** | Qdrant / ChromaDB | Per-disease symptom storage |
 | **Embedding Models** | MedGemma encoder / BiomedCLIP | Multi-modal vectorization |
+| **Threshold Learning** | Scikit-learn / XGBoost | Dynamic biomarker threshold discovery |
 | **Backend** | Python (FastAPI) | API layer |
 | **Frontend** | React / Next.js | Doctor interface |
 | **Storage** | PostgreSQL + S3 | Metadata + image storage |
