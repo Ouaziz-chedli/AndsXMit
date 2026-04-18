@@ -39,10 +39,14 @@ prenatal-ai/
 │   ├── Dockerfile
 │   └── check_db.js            # DB diagnostic script
 │
-└── frontend/                   # React/Vite — UI
-    ├── src/
-    ├── package.json
-    └── Dockerfile
+├── frontend/                   # React/Vite — UI
+│   ├── src/
+│   ├── package.json
+│   └── Dockerfile
+│
+├── Modelfile                   # Ollama MedGemma configuration
+└── scripts/
+    └── setup-ollama.sh        # Ollama installation script
 ```
 
 ---

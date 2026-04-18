@@ -192,7 +192,7 @@ async def process_case_upload_to_vector_store(
         is_positive=(case_data.label == "positive"),
         embedding=embedding,
         symptom_text=symptom_text,
-        gestational_age_weeks=case_data.gestational_age_weeks or 0.0,
+        gestational_age_weeks=case_data.gestational_age_weeks if case_data.gestational_age_weeks is not None else None,
         b_hcg_mom=b_hcg_mom,
         papp_a_mom=papp_a_mom,
         metadata={

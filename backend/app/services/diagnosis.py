@@ -14,6 +14,7 @@ Pipeline:
 7. Result → Final Diagnosis Report
 """
 
+import json
 from typing import List, Optional, Dict
 from dataclasses import dataclass, field
 
@@ -86,11 +87,23 @@ class DiagnosisService:
         query: DiagnosisQuery,
     ) -> DiagnosisResult:
         """
-        Perform complete diagnosis from an image file.
+        Perform complete diagnosis from an image file (defaults to down_syndrome for MVP).
+        """
+        return await self._diagnose_single_disease(image_path, query, "down_syndrome")
+
+    async def _diagnose_single_disease(
+        self,
+        image_path: str,
+        query: DiagnosisQuery,
+        disease_id: str,
+    ) -> DiagnosisResult:
+        """
+        Run the full pipeline for a single disease.
 
         Args:
             image_path: Path to ultrasound image
             query: Diagnosis query with trimester and patient context
+            disease_id: Which disease to score
 
         Returns:
             DiagnosisResult with final score and explanation
@@ -116,12 +129,11 @@ class DiagnosisService:
         )
 
         # Step 3: Generate symptom embedding
-        intermediate.symptom_embedding = self.medgemma.embed_symptoms(
+        intermediate.symptom_embedding = await self.medgemma.embed_symptoms_async(
             intermediate.symptom_description.symptom_text
         )
 
-        # Step 4: Search for similar cases (single disease for MVP)
-        disease_id = "down_syndrome"  # MVP: single disease
+        # Step 4: Search for similar cases
         await self._search_similar_cases(
             intermediate.symptom_embedding,
             disease_id,
@@ -131,6 +143,10 @@ class DiagnosisService:
 
         # Step 5: Calculate raw score
         await self._calculate_raw_score(intermediate)
+
+        # Guard: if raw_score is somehow None, default to 0.0
+        if intermediate.raw_score is None:
+            intermediate.raw_score = 0.0
 
         # Step 6: Apply trimester weighting
         await self._apply_trimester_weighting(
@@ -181,15 +197,7 @@ class DiagnosisService:
 
         for disease_id in disease_ids:
             try:
-                result = await self.diagnose_from_image(image_path, query)
-                # Update disease_id in result
-                result = DiagnosisResult(
-                    disease_id=disease_id,
-                    disease_name=self._get_disease_name(disease_id),
-                    final_score=result.final_score,
-                    confidence_interval=result.confidence_interval,
-                    applied_priors=result.applied_priors,
-                )
+                result = await self._diagnose_single_disease(image_path, query, disease_id)
                 results.append(result)
             except Exception as e:
                 # Log error and continue with other diseases
@@ -211,8 +219,8 @@ class DiagnosisService:
         trimester: str,
         gestational_age_weeks: Optional[float],
     ) -> SymptomDescription:
-        """Extract symptoms using MedGemma."""
-        return self.medgemma.extract_symptoms(
+        """Extract symptoms using MedGemma (async, safe inside FastAPI)."""
+        return await self.medgemma.extract_symptoms_async(
             image_path=image_path,
             user_provided_trimester=trimester,
         )
@@ -443,10 +451,11 @@ def run_diagnosis_mock(
         else:
             score = r["final_score"]
 
-        # Adjust for biomarker patterns if provided
+        # Adjust for biomarker patterns if provided — compare using MoM, not raw units
         if patient_context.b_hcg and patient_context.papp_a:
+            mom = patient_context.to_mom()
             if r["disease_id"] == "down_syndrome":
-                if patient_context.b_hcg > 50000 and patient_context.papp_a < 1500:
+                if (mom.b_hcg_mom or 0) > 2.0 and (mom.papp_a_mom or 1) < 0.5:
                     applied_priors.append("biomarker_pattern_ds")
                     score = min(score * 1.3, 1.0)
 
@@ -471,21 +480,28 @@ def run_comprehensive_background(
     image_paths: list[str],
     trimester: str,
     patient_context: PatientContext,
-    db=None,
 ) -> None:
     """
     Background task for comprehensive scan.
+    Always creates its own DB session — never shares the request session across threads.
     """
     import time
     time.sleep(2)
 
     results = run_diagnosis_mock(patient_context, trimester)
 
-    if db:
-        from app.db import DiagnosisTaskRepository
+    from app.db.database import SessionLocal
+    from app.db import DiagnosisTaskRepository
+    db = SessionLocal()
+    try:
         task_repo = DiagnosisTaskRepository(db)
         task_repo.update_status(
             task_id=task_id,
             status="completed",
             results=json.dumps([r.model_dump() for r in results]),
         )
+        db.commit()
+    except Exception as e:
+        print(f"Background task DB write failed for {task_id}: {e}")
+    finally:
+        db.close()

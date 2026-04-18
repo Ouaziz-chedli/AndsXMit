@@ -25,6 +25,7 @@ router = APIRouter(prefix="/api/v1/diagnosis", tags=["diagnosis"])
 
 @router.post("", response_model=DiagnosisResponse)
 async def diagnose(
+    background_tasks: BackgroundTasks,
     images: list[UploadFile] = File(...),
     trimester: str = Form(...),
     b_hcg: float | None = Form(None),
@@ -33,7 +34,6 @@ async def diagnose(
     gestational_age_weeks: float = Form(...),
     previous_affected_pregnancy: bool = Form(False),
     db: Session = Depends(get_db),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
     """
     Upload ultrasound images and get diagnosis.
@@ -80,14 +80,14 @@ async def diagnose(
     results = run_diagnosis_mock(patient_context, trimester)
     fast_track_ms = int((time.time() - start_time) * 1000)
 
-    # Queue comprehensive background task
+    # Queue comprehensive background task (creates its own DB session internally)
     background_tasks.add_task(
         run_comprehensive_background,
         task_id=task_id,
         image_paths=image_paths,
         trimester=trimester,
         patient_context=patient_context,
-    )
+    )  # Note: no db= arg — background task owns its own session
 
     return DiagnosisResponse(
         fast_track=results,

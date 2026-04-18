@@ -40,13 +40,18 @@ def calculate_age_risk(mother_age: int) -> float:
         >>> calculate_age_risk(40)
         ~5.0
     """
-    if mother_age < 30:
+    # Maternal age risk curve based on epidemiological data.
+    # Baseline at age 30 (×1.0), risk accelerates with age.
+    # Reference: age 30 → ×1.0, age 35 → ×1.45, age 40 → ×5.0 (capped)
+    if mother_age <= 30:
         return 1.0
-
-    # Approximation of maternal age risk curve
-    # Risk at 30: 1/800, at 35: 1/270, at 40: 1/100
-    risk_factor = 800 / max(100, 800 - 10 * (mother_age - 30) ** 2)
-    return min(risk_factor, 5.0)  # Cap at 5x
+    years_over_30 = mother_age - 30
+    denominator = 800 - 10 * years_over_30 ** 2
+    if denominator <= 0:
+        # Above ~38 the quadratic formula breaks down — return cap directly
+        return 5.0
+    risk_factor = 800 / denominator
+    return min(risk_factor, 5.0)
 
 
 def calculate_biomarker_risk(
@@ -171,6 +176,8 @@ def apply_priors(
     if context.previous_affected_pregnancy:
         multiplier *= 2.5
 
+    # Note: scores can exceed 1.0 for high-risk cases — they are relative rankings,
+    # not calibrated probabilities. Normalization happens at the presentation layer.
     return weighted_score * multiplier
 
 

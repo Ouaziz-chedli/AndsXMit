@@ -15,11 +15,12 @@ Falls back to mock mode when Ollama is unavailable.
 import io
 import re
 import json
+import asyncio
+import concurrent.futures
 from typing import List, Optional
 from dataclasses import dataclass
 import torch
 import httpx
-import asyncio
 
 from .image_processor import load_ultrasound_image, image_to_bytes
 from .ollama_client import get_ollama_client, OllamaClient
@@ -56,6 +57,12 @@ class SymptomDescription:
     overall: str
     trimester: Optional[str] = None
     gestational_age_weeks: Optional[float] = None
+
+    @property
+    def symptom_text(self) -> str:
+        """Human-readable summary for embedding and display."""
+        parts = [f"{s.type}={s.value}" for s in self.symptoms]
+        return f"Symptoms: {', '.join(parts)}. {self.overall}"
 
 
 class MedGemmaError(Exception):
@@ -174,12 +181,15 @@ class MedGemma:
 
         try:
             client = self._get_client()
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # Can't check async in async context easily - assume available
-                self._ollama_available = True
-            else:
-                self._ollama_available = loop.run_until_complete(client.is_available())
+            try:
+                asyncio.get_running_loop()
+                # Running inside an async context — do a sync HTTP probe instead
+                import httpx as _httpx
+                resp = _httpx.get(f"{client.base_url}/api/tags", timeout=2.0)
+                self._ollama_available = resp.status_code == 200
+            except RuntimeError:
+                # No running loop — safe to use asyncio.run
+                self._ollama_available = asyncio.run(client.is_available())
         except Exception:
             self._ollama_available = False
 
@@ -290,15 +300,7 @@ class MedGemma:
         # Convert image to bytes
         image_bytes = image_to_bytes(image, format="PNG")
 
-        # Run sync analysis using asyncio
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                return asyncio.run(self._analyze_async(image_bytes, trimester, metadata.gestational_age_weeks))
-            else:
-                return loop.run_until_complete(self._analyze_async(image_bytes, trimester, metadata.gestational_age_weeks))
-        except RuntimeError:
-            return asyncio.run(self._analyze_async(image_bytes, trimester, metadata.gestational_age_weeks))
+        return self._analyze(image_bytes, trimester, metadata.gestational_age_weeks)
 
     def extract_symptoms_from_bytes(
         self,
@@ -319,6 +321,31 @@ class MedGemma:
         """
         self._ensure_loaded()
         return self._analyze(image_bytes, trimester, gestational_age_weeks)
+
+    async def extract_symptoms_async(
+        self,
+        image_path: str,
+        user_provided_trimester: Optional[str] = None,
+    ) -> SymptomDescription:
+        """
+        Async: Extract symptoms from an ultrasound image file.
+
+        Args:
+            image_path: Path to the ultrasound image (DICOM, JPEG, PNG)
+            user_provided_trimester: Optional trimester override ("1st", "2nd", "3rd")
+
+        Returns:
+            SymptomDescription with extracted symptoms
+        """
+        self._ensure_loaded()
+        image, metadata = load_ultrasound_image(image_path)
+        trimester = user_provided_trimester or metadata.trimester
+        if trimester is None:
+            raise MedGemmaError(
+                "Trimester must be provided or extractable from image metadata."
+            )
+        image_bytes = image_to_bytes(image, format="PNG")
+        return await self._analyze_async(image_bytes, trimester, metadata.gestational_age_weeks)
 
     async def extract_symptoms_from_bytes_async(
         self,
@@ -349,15 +376,18 @@ class MedGemma:
         """
         Internal method to perform analysis on image bytes.
 
-        Args:
-            image_bytes: Image data as bytes
-            trimester: Trimester
-            gestational_age_weeks: Optional gestational age
-
-        Returns:
-            SymptomDescription with extracted symptoms
+        Runs async analysis in a thread pool when called from within a running
+        event loop (e.g. FastAPI handlers), so asyncio.run() is never nested.
         """
-        return asyncio.run(self._analyze_async(image_bytes, trimester, gestational_age_weeks))
+        coro = self._analyze_async(image_bytes, trimester, gestational_age_weeks)
+        try:
+            asyncio.get_running_loop()
+            # We are inside a running loop — delegate to a worker thread
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                return pool.submit(asyncio.run, coro).result()
+        except RuntimeError:
+            # No running loop — safe to call directly
+            return asyncio.run(coro)
 
     def _mock_analysis(self, trimester: str) -> SymptomDescription:
         """
@@ -456,8 +486,13 @@ class MedGemma:
         if not self._is_ollama_available():
             return [0.1] * 768
 
+        coro = self.embed_image_async(image_bytes)
         try:
-            return asyncio.run(self.embed_image_async(image_bytes))
+            asyncio.get_running_loop()
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                return pool.submit(asyncio.run, coro).result()
+        except RuntimeError:
+            return asyncio.run(coro)
         except Exception:
             return [0.1] * 768
 
@@ -499,8 +534,13 @@ class MedGemma:
         if not self._is_ollama_available():
             return [hash(symptom_text) % 100 / 100.0] * 768
 
+        coro = self.embed_symptoms_async(symptom_text)
         try:
-            return asyncio.run(self.embed_symptoms_async(symptom_text))
+            asyncio.get_running_loop()
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                return pool.submit(asyncio.run, coro).result()
+        except RuntimeError:
+            return asyncio.run(coro)
         except Exception:
             return [hash(symptom_text) % 100 / 100.0] * 768
 
@@ -570,7 +610,7 @@ async def extract_symptoms(
     """
     medgemma = get_medgemma()
     medgemma._ensure_loaded()
-    return await medgemma.extract_symptoms_async(image_path, user_provided_trimester)
+    return await medgemma.extract_symptoms_async(image_path, user_provided_trimester)  # noqa: now correctly defined
 
 
 async def extract_symptoms_from_bytes(

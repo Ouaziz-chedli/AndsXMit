@@ -4,6 +4,7 @@ Ollama Client - Interface to Ollama for MedGemma inference.
 Ollama runs MedGemma locally via REST API, enabling self-hosted AI inference.
 """
 
+import base64
 import httpx
 from typing import Optional
 
@@ -50,10 +51,13 @@ class OllamaClient:
         with open(image_path, "rb") as f:
             image_bytes = f.read()
 
+        # Use base64 encoding for images (required by Ollama API)
+        image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+
         json_body = {
             "model": self.model,
             "prompt": prompt,
-            "images": [image_bytes.hex()],
+            "images": [image_b64],
             "stream": False,
         }
 
@@ -84,10 +88,13 @@ class OllamaClient:
         Returns:
             Model's text response
         """
+        # Use base64 encoding for images (required by Ollama API)
+        image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+
         json_body = {
             "model": self.model,
             "prompt": prompt,
-            "images": [image_bytes.hex()],
+            "images": [image_b64],
             "stream": False,
         }
 

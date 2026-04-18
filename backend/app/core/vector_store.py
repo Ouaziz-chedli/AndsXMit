@@ -36,7 +36,7 @@ class StoredCase:
     is_positive: bool
     embedding: List[float]
     symptom_text: str
-    gestational_age_weeks: float
+    gestational_age_weeks: Optional[float] = None
     b_hcg_mom: Optional[float] = None
     papp_a_mom: Optional[float] = None
     metadata: Optional[Dict[str, Any]] = None
@@ -116,8 +116,9 @@ class VectorStore:
             "disease_id": case.disease_id,
             "trimester": case.trimester,
             "is_positive": case.is_positive,
-            "gestational_age_weeks": case.gestational_age_weeks,
         }
+        if case.gestational_age_weeks is not None:
+            metadata["gestational_age_weeks"] = case.gestational_age_weeks
 
         if case.b_hcg_mom is not None:
             metadata["b_hcg_mom"] = case.b_hcg_mom
@@ -141,22 +142,34 @@ class VectorStore:
         Args:
             cases: List of StoredCase objects
         """
-        # Group cases by collection to minimize collection lookups
-        collections = {}
-
+        # Group by collection to batch inserts
+        from collections import defaultdict
+        grouped: dict = defaultdict(list)
         for case in cases:
-            collection_key = (case.disease_id, case.trimester)
-            if collection_key not in collections:
-                collections[collection_key] = self.get_or_create_collection(
-                    disease_id=case.disease_id,
-                    trimester=case.trimester
-                )
-            collections[collection_key]
+            grouped[(case.disease_id, case.trimester)].append(case)
 
-        # For now, add cases one by one for simplicity
-        # In production, would batch add per collection
-        for case in cases:
-            self.add_case(case)
+        for (disease_id, trimester), group in grouped.items():
+            collection = self.get_or_create_collection(disease_id, trimester)
+            ids, embeddings, documents, metadatas = [], [], [], []
+            for case in group:
+                meta = {
+                    "case_id": case.case_id,
+                    "disease_id": case.disease_id,
+                    "trimester": case.trimester,
+                    "is_positive": case.is_positive,
+                    "gestational_age_weeks": case.gestational_age_weeks,
+                }
+                if case.b_hcg_mom is not None:
+                    meta["b_hcg_mom"] = case.b_hcg_mom
+                if case.papp_a_mom is not None:
+                    meta["papp_a_mom"] = case.papp_a_mom
+                if case.metadata:
+                    meta.update(case.metadata)
+                ids.append(case.case_id)
+                embeddings.append(case.embedding)
+                documents.append(case.symptom_text)
+                metadatas.append(meta)
+            collection.add(ids=ids, embeddings=embeddings, documents=documents, metadatas=metadatas)
 
     def search_disease(
         self,
@@ -192,10 +205,16 @@ class VectorStore:
         if filter_positive is not None:
             where_filter = {"is_positive": filter_positive}
 
+        # Guard: ChromaDB raises if n_results > collection size
+        count = collection.count()
+        if count == 0:
+            return []
+        actual_k = min(top_k, count)
+
         results = collection.query(
             query_embeddings=[query_embedding],
-            n_results=top_k,
-            where=where_filter
+            n_results=actual_k,
+            where=where_filter,
         )
 
         if not results or not results["ids"][0]:

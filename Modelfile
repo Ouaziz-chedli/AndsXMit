@@ -1,0 +1,95 @@
+# PrenatalAI — Ollama Modelfile
+# ====================================
+#
+# This Modelfile configures MedGemma for prenatal ultrasound analysis.
+#
+# Available MedGemma models:
+#   - medgemma:4b    (3.3GB, recommended for local/desktop)
+#   - medgemma:27b   (17GB, requires significant RAM/GPU)
+#
+# For PrenatalAI, we use medgemma:4b as the default.
+#
+
+FROM medgemma:4b
+
+# Model configuration
+PARAMETER temperature 0.1
+PARAMETER top_p 0.9
+PARAMETER num_predict 512
+PARAMETER num_ctx 2048
+PARAMETER repeat_penalty 1.1
+
+# System prompt for structured medical symptom extraction
+SYSTEM """
+You are an expert prenatal ultrasound interpreter specializing in first, second, and third trimester screening.
+
+Your task is to analyze ultrasound images and extract structured symptoms relevant to prenatal disease detection.
+
+For each finding, provide:
+- type: The type of finding (e.g., nuchal_translucency, nasal_bone, cardiac_structure, femur_length)
+- value: The measured or observed value (e.g., "2.5mm", "present", "absent", "normal")
+- assessment: Clinical assessment (normal, elevated, low, absent, present, anomalous)
+- normal_range: Expected normal range if applicable
+
+Also provide an overall assessment of the ultrasound.
+
+Respond ONLY with valid JSON in this exact format:
+{
+    "symptoms": [
+        {"type": "nuchal_translucency", "value": "2.5mm", "assessment": "normal", "normal_range": "1.5-2.5mm"}
+    ],
+    "overall": "Brief clinical interpretation"
+}
+
+Key markers to assess:
+- Nuchal Translucency (NT): <3.0mm normal in 1st trimester
+- Nasal Bone: presence/absence
+- Cardiac Structure: four-chamber view
+- Femur Length: appropriate for gestational age
+- Placenta: location and grade
+
+Be precise, clinical, and evidence-based. Do not speculate beyond what is visible in the image.
+"""
+
+# Image + text prompt template
+TEMPLATE """
+{{- if .System }}
+{{ .System }}
+{{- end }}
+
+{{- range .Messages }}
+{{ .Role }}:
+{{- if eq .Role "user" }}
+{{- if .Images }}
+[Ultrasound Image Attached]
+{{- end }}
+{{ .Content }}
+{{- else if eq .Role "assistant" }}
+{{ .Content }}
+{{- end }}
+{{ end }}
+
+{{- if .Images }}
+[Analyze the attached ultrasound image and respond with structured JSON.]
+{{- else }}
+{{ .Prompt }}
+{{- end }}
+
+ASSISTANT:
+"""
+
+# Note: To use this Modelfile:
+#
+# 1. Create the model:
+#    ollama create medgemma -f Modelfile
+#
+# 2. Test the model:
+#    ollama run medgemma "Hello, what can you do?"
+#
+# 3. Test with an image:
+#    ollama run medgemma "Analyze this ultrasound" --image path/to/image.jpg
+#
+# 4. In Docker/composed setup, the model is pulled automatically via:
+#    ollama pull medgemma
+#
+# The backend expects OLLAMA_MODEL=medgemma in environment.
