@@ -222,23 +222,6 @@ The aggregation layer combines all signals into a final diagnosis probability:
 ```
 
 **Key Principle**: MedGemma sees ONLY the ultrasound image. All contextual factors (age, genetics, history) are processed algorithmically in the aggregation layer, not by the AI model.
-┌─────────────────────────────────────────────────────────────┐
-│                      AGGREGATION LAYER                       │
-│                                                             │
-│  1. Per-Disease Scores (from vector search)                  │
-│     ├── Disease A: {positive_sim: 0.85, negative_sim: 0.30} │
-│     ├── Disease B: {positive_sim: 0.60, negative_sim: 0.55} │
-│     └── Disease N: ...                                       │
-│                                                             │
-│  2. Trimester Context                                       │
-│     └── Which trimester weight profile to apply              │
-│                                                             │
-│  3. Patient Context (Bayesian Priors)                        │
-│     ├── Maternal age: 38 → +0.15 for chromosomal            │
-│     ├── Family history: Down Syndrome → +0.20               │
-│     └── Previous pregnancy: chromosomal issue → +0.10        │
-└─────────────────────────────────────────────────────────────┘
-```
 
 #### Step-by-Step Aggregation
 
@@ -632,13 +615,73 @@ The architecture is well-designed conceptually. The main risk is MedGemma's appl
 - [ ] Global community of contributing physicians
 - [ ] Reduction in unnecessary invasive procedures worldwide
 
+### Data Strategy
+
+#### Phase 1: Hackaton (Current)
+- **Data sources**: Publicly accessible medical datasets (e.g., Kaggle ultrasound datasets, research publications with sample images)
+- **Mock data**: Synthetic/mock cases to demonstrate architecture
+- **Goal**: Prove the concept and architecture works
+
+#### Phase 2: Certification & Clinical Trials
+- **Objective**: Achieve regulatory clearance (CE marking in Europe, FDA clearance in US)
+- **Clinical trials**: Partner with hospitals to validate diagnostic accuracy
+- **Data access**: Certified medical institutions contribute anonymized cases
+- **Funding**: Clinical trials funded through:
+  - Research grants (EU Horizon programs, national health research funds)
+  - Hospital partnerships (in-kind contribution)
+  - Venture capital (post-prototype)
+
+#### Phase 3: Community Scaling
+- **Certified users**: Hospitals and clinics upload anonymized cases
+- **Quality control**: Cases validated before entering community database
+- **Network effect**: More users → better accuracy → more users
+- **Data ownership**: Contributors retain ownership; licensing model for use
+
+### Regulatory & Certification Path
+
+#### CE Marking (Europe)
+1. **Classify device**: Software as Medical Device (SaMD) — likely Class IIa or IIb
+2. **Conformity assessment**: Meet MDR (Medical Device Regulation) requirements
+3. **Clinical evaluation**: Demonstrate safety and performance
+4. **Post-market surveillance**: Ongoing monitoring after deployment
+
+#### FDA Clearance (USA)
+1. **510(k) submission**: Demonstrate substantial equivalence to predicate device
+2. **De novo pathway**: For novel devices without predicate
+3. **Clinical studies**: Required for higher-risk classifications
+4. **Quality System**: Comply with 21 CFR Part 820
+
+#### Funding Clinical Trials
+| Source | Type | Notes |
+|--------|------|-------|
+| **EU Research Grants** | Non-dilutive | Horizon Europe, EIC Accelerator |
+| **National Health Institutes** | Non-dilutive | ANR (France), NHS (UK), NIH (US) |
+| **Hospital Partnerships** | In-kind | Data contribution + trial infrastructure |
+| **Venture Capital** | Dilutive | Post-prototype, for scaling |
+| **Strategic Investors** | Dilutive | Medical device companies, health insurers |
+
 ---
 
 ## Project Status
 
 **Current Phase**: Brainstorming & Architecture Definition
 
-This document represents the initial vision and design decisions. The project is being developed as part of a Hackaton.
+This document represents the initial vision and design decisions. The project is being developed as part of the **AndsXMit Hackaton**.
+
+### What's Defined
+- ✅ Core AI architecture (MedGemma + RAG)
+- ✅ Per-disease vector database structure
+- ✅ Aggregation layer logic
+- ✅ Two-stage inference approach
+- ✅ Data strategy (phased)
+- ✅ Regulatory path (CE/FDA)
+
+### What's Needed
+- 🔲 MedGemma integration testing with ultrasound images
+- 🔲 Vector database implementation
+- 🔲 Prototype UI/UX
+- 🔲 Mock community upload flow
+- 🔲 Clinical partnership discussions
 
 ---
 
@@ -646,10 +689,18 @@ This document represents the initial vision and design decisions. The project is
 
 This project is in early development. If you're interested in contributing:
 
-- Medical professionals: Share your expertise on disease presentations and ultrasound markers
-- ML/AI engineers: Help build MedGemma integration and vector search
-- Developers: Build the platform, APIs, and community features
-- Healthcare UX designers: Help design the doctor interface
+- **Medical professionals**: Share your expertise on disease presentations and ultrasound markers
+- **ML/AI engineers**: Help build MedGemma integration and vector search
+- **Developers**: Build the platform, APIs, and community features
+- **Healthcare UX designers**: Help design the doctor interface
+- **Data contributors** (future): Certified medical institutions for anonymized case uploads
+
+### How You Can Help Now
+
+1. **Spread the word** about the project
+2. **Identify** publicly available ultrasound datasets
+3. **Connect** us with hospitals or research institutions
+4. **Review** our architecture for medical accuracy
 
 ---
 
