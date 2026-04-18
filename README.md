@@ -68,14 +68,15 @@ Instead of training custom models (too slow for hackaton), we leverage **MedGemm
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                           INPUT LAYER                                │
-│   Ultrasound Image(s) + Patient Context (age, history, etc.)         │
+│   Ultrasound Image(s) + Current Trimester                             │
 └─────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │                    SYMPTOM EXTRACTION (MedGemma)                     │
-│   Prompt: "Describe all observable symptoms in this ultrasound"    │
-│   Output: Structured textual symptom description                     │
+│   AI Input: Ultrasound image ONLY                                     │
+│   AI Output: Structured textual symptom description                   │
+│   (Trimester context used only to select which vector DB to query)  │
 └─────────────────────────────────────────────────────────────────────┘
                                     │
                     ┌───────────────┼───────────────┐
@@ -123,6 +124,7 @@ Instead of training custom models (too slow for hackaton), we leverage **MedGemm
 | Aspect | Benefit |
 |--------|---------|
 | **No training required** | MedGemma is already trained on medical images |
+| **AI scope limited** | MedGemma handles symptom extraction only; all contextual factors are algorithmic |
 | **Community = your moat** | Doctor uploads → stored in disease vector DB → improves future diagnoses |
 | **Explainable** | Shows which similar cases influenced the diagnosis |
 | **Privacy-friendly** | Can run MedGemma locally |
@@ -197,6 +199,29 @@ The aggregation layer combines all signals into a final diagnosis probability:
 #### Inputs to Aggregation
 
 ```
+┌─────────────────────────────────────────────────────────────┐
+│                      AGGREGATION LAYER                       │
+│  (Algorithmic processing - NOT handled by AI)              │
+│                                                             │
+│  1. Per-Disease Similarity Scores (from vector search)       │
+│     ├── Disease A: {positive_sim: 0.85, negative_sim: 0.30} │
+│     ├── Disease B: {positive_sim: 0.60, negative_sim: 0.55} │
+│     └── Disease N: ...                                       │
+│                                                             │
+│  2. Trimester Context (ALGORITHMIC)                         │
+│     └── Which trimester weight profile to apply               │
+│                                                             │
+│  3. Patient Context - ALL ALGORITHMIC (Bayesian Priors)     │
+│     ├── Maternal age: 38 → multiplier for chromosomal        │
+│     ├── Family history: Down Syndrome → disease-specific boost│
+│     ├── Genetic history: hereditary conditions               │
+│     ├── Previous pregnancies: outcome history                 │
+│     ├── Ethnicity: population-based priors                   │
+│     └── IVF/Conception method                                │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Key Principle**: MedGemma sees ONLY the ultrasound image. All contextual factors (age, genetics, history) are processed algorithmically in the aggregation layer, not by the AI model.
 ┌─────────────────────────────────────────────────────────────┐
 │                      AGGREGATION LAYER                       │
 │                                                             │
@@ -304,25 +329,29 @@ Noonan:         0.66 × (0.60/2.30) = 0.17
 ### RAG Retrieval Flow
 
 ```
-1. Doctor uploads ultrasound + context (trimester, parental params)
+1. Doctor uploads:
+   - Ultrasound image(s) for current trimester
+   - Patient context (age, genetics, history) → goes to ALGORITHMIC layer
 
-2. MedGemma generates symptom description:
+2. MedGemma processes image ONLY:
    "Fetus shows increased nuchal translucency (3.2mm), absent nasal bone,
     cardiac anomaly consistent with AV canal defect..."
 
-3. Query all disease vector DBs in parallel:
-   - Embed input image + text
+3. Query disease vector DBs (trimester-specific):
+   - Embed input image
    - Retrieve top-K most similar symptom patterns per disease
 
-4. Aggregation:
+4. Aggregation (ALGORITHMIC - not AI):
    - Combine similarity scores with trimester weights
-   - Apply patient context as Bayesian priors
+   - Apply patient context (age, genetics, history) as Bayesian priors
    - Calculate pondrated mean per disease
 
 5. Return diagnosis:
    - Fast track: Top 3-5 probable diseases (immediate)
    - Comprehensive: Full disease list (background, async)
 ```
+
+**Important**: MedGemma does NOT receive patient context. The AI only sees the ultrasound image. All contextual factors (maternal age, genetic history, etc.) are processed algorithmically.
 
 ### No Training = Fast Hackaton Development
 
