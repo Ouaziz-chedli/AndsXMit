@@ -19,6 +19,20 @@
 
 ---
 
+## Documentation
+
+| Document | Purpose |
+|----------|---------|
+| [docs/ARCHITECTURE_INDEX.md](docs/ARCHITECTURE_INDEX.md) | **Navigation hub** — start here |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Complete architectural reference |
+| [docs/Dev1-AI-Pipeline.md](docs/Dev1-AI-Pipeline.md) | AI/ML implementation (Dev1) |
+| [docs/Dev2-API-Infrastructure.md](docs/Dev2-API-Infrastructure.md) | API & infrastructure (Dev2) |
+| [backend/README.md](backend/README.md) | Backend usage & API docs |
+| [backend/pipeline-detection.md](backend/pipeline-detection.md) | 7-step diagnosis pipeline |
+| [backend/pipeline-doctor.md](backend/pipeline-doctor.md) | Doctor upload workflow |
+
+---
+
 ## The Problem
 
 Prenatal disease detection is critical for early intervention and family planning. However, current methods face significant challenges:

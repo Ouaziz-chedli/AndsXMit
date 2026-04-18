@@ -21,6 +21,22 @@
 
 ---
 
+## Documentation Index
+
+> For navigation across all project docs, see [ARCHITECTURE_INDEX.md](./ARCHITECTURE_INDEX.md)
+
+| Role / Need | Document |
+|-------------|----------|
+| Product vision & goals | `README.md` |
+| Complete architecture reference | `ARCHITECTURE.md` (this file) |
+| AI/ML implementation (Dev1) | `Dev1-AI-Pipeline.md` |
+| API/infrastructure (Dev2) | `Dev2-API-Infrastructure.md` |
+| Backend usage & API docs | `backend/README.md` |
+| Diagnosis pipeline | `backend/pipeline-detection.md` |
+| Doctor upload flow | `backend/pipeline-doctor.md` |
+
+---
+
 ## System Overview
 
 **PrenatalAI** is a non-invasive AI diagnostic platform that analyzes ultrasound images to detect prenatal diseases, reducing unnecessary invasive procedures (amniocentesis, CVS).
