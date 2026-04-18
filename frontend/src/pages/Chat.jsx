@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { buildApiUrl } from '../lib/api';
 
 const Chat = () => {
   const [messages, setMessages] = useState([{ role: 'assistant', content: 'Hello. I am MedGemma, specialized in prenatal ultrasound analysis. How can I help you?' }]);
@@ -21,8 +22,7 @@ const Chat = () => {
     setLoading(true);
 
     try {
-      const baseUrl = import.meta.env.VITE_AI_API_URL || 'http://localhost:8000';
-      const res = await fetch(`${baseUrl}/api/llm/chat`, {
+      const res = await fetch(buildApiUrl('/api/llm/chat'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: userMsg })

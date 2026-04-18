@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LogIn, Key, Mail, User, Phone, Building, Component } from 'lucide-react';
+import { buildApiUrl } from '../lib/api';
 
 const InputField = ({ label, icon: Icon, type = "text", ...props }) => (
   <div>
@@ -55,7 +56,6 @@ const Login = () => {
 
     try {
       const endpoint = isRegister ? '/api/auth/register' : '/api/auth/login';
-      const baseUrl = import.meta.env.VITE_AUTH_API_URL || 'http://localhost:3000';
       
       const payload = isRegister ? {
         email,
@@ -67,7 +67,7 @@ const Login = () => {
         password
       };
 
-      const res = await fetch(`${baseUrl}${endpoint}`, {
+      const res = await fetch(buildApiUrl(endpoint), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -77,7 +77,7 @@ const Login = () => {
       if (res.ok) {
         if (isRegister) {
           // Auto-login after register
-          const loginRes = await fetch(`${baseUrl}/api/auth/login`, {
+          const loginRes = await fetch(buildApiUrl('/api/auth/login'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email, password })

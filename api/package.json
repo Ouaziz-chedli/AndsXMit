@@ -18,6 +18,7 @@
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "http-proxy-middleware": "^3.0.5",
     "jsonwebtoken": "^9.0.3",
     "jwt-simple": "^0.5.6",
     "sqlite3": "^6.0.1"

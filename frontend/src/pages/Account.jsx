@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { UploadCloud, CheckCircle2, AlertCircle, Building2, UserCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { buildApiUrl } from '../lib/api';
 
 const InputField = ({ label, type, value, onChange, placeholder }) => (
   <div>
@@ -39,8 +40,7 @@ const Account = () => {
     
     const fetchUser = async () => {
       try {
-        const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
-        const res = await fetch(`${baseUrl}/user/me`, {
+        const res = await fetch(buildApiUrl('/api/user/me'), {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -74,8 +74,7 @@ const Account = () => {
     uploadData.append('description', 'Context file for RAG');
 
     try {
-      const baseUrl = import.meta.env.VITE_AI_API_URL || 'http://localhost:8000';
-      const res = await fetch(`${baseUrl}/api/rag/upload-context`, {
+      const res = await fetch(buildApiUrl('/api/rag/upload-context'), {
         method: 'POST',
         body: uploadData,
       });
@@ -94,8 +93,7 @@ const Account = () => {
     e.preventDefault();
     setUpdateStatus('updating');
     try {
-      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
-      const res = await fetch(`${baseUrl}/user/me`, {
+      const res = await fetch(buildApiUrl('/api/user/me'), {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

@@ -12,7 +12,10 @@ services:
     environment:
       - DATABASE_URL=file:./dev.db
       - JWT_SECRET=${JWT_SECRET}
+      - BACKEND_URL=http://backend:8000
     restart: unless-stopped
+    depends_on:
+      - backend
 
   frontend:
     build:
@@ -27,3 +30,20 @@ services:
     restart: unless-stopped
     depends_on:
       - api
+
+  backend:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/data:/data
+    environment:
+      - DATA_DIR=/data
+      - CHROMA_PATH=/data/vector_db
+      - DB_PATH=/data/db.sqlite
+      - IMAGE_DIR=/data/images
+      - OLLAMA_HOST=http://host.docker.internal:11434
+      - OLLAMA_MODEL=medgemma
+    restart: unless-stopped
