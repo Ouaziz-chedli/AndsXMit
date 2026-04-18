@@ -63,9 +63,11 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     DATA_DIR: str = "/data"
-    MEDGEMMA_MODEL_PATH: str = "/data/models/medgemma"
     CHROMA_PATH: str = "/data/vector_db"
     DB_PATH: str = "/data/db.sqlite"
+    # Ollama settings
+    OLLAMA_HOST: str = "http://localhost:11434"
+    OLLAMA_MODEL: str = "medgemma"  # Or specific tag like "medgemma:latest"
     class Config:
         env_file = ".env"
 
@@ -82,6 +84,142 @@ app = FastAPI(title="PrenatalAI")
 @app.get("/health")
 def health():
     return {"status": "ok"}
+```
+
+---
+
+## Ollama Setup (Model Hosting)
+
+Ollama runs the AI model locally via a simple REST API. This is the simplest way to self-host MedGemma.
+
+### Quick Start
+
+```bash
+# 1. Install Ollama (macOS/Linux)
+curl -fsSL https://ollama.com/install.sh | sh
+
+# 2. Start Ollama server (runs in background)
+ollama serve
+
+# 3. In another terminal, pull and run MedGemma
+ollama pull medgemma
+ollama run medgemma "Analyze this ultrasound image"
+
+# GPU check (optional, for faster inference)
+ollama ps  # Shows which model is loaded and hardware used
+```
+
+### Model Management Commands
+
+```bash
+# Pull a model (downloads to local cache)
+ollama pull medgemma
+
+# List available models
+ollama list
+
+# Run a model interactively
+ollama run medgemma
+
+# Remove a model
+ollama rm medgemma
+
+# Show model info
+ollama show medgemma
+```
+
+### GPU Support
+
+Ollama automatically uses GPU when available:
+
+```bash
+# Check if GPU is detected
+ollama run medgemma "test"  # Look for "using GPU" in output
+
+# Force CPU-only (slower but works without GPU)
+OLLAMA_HOST=localhost:11434 CUDA_VISIBLE_DEVICES="" python your_script.py
+```
+
+### API Usage from Python
+
+```python
+# backend/app/core/ollama_client.py
+
+import httpx
+from typing import AsyncIterator
+
+class OllamaClient:
+    """Simple Ollama API client for MedGemma inference."""
+
+    def __init__(self, base_url: str = "http://localhost:11434"):
+        self.base_url = base_url
+        self.client = httpx.AsyncClient(timeout=120.0)  # Long timeout for inference
+
+    async def analyze_image(self, image_path: str, prompt: str) -> str:
+        """
+        Send image to Ollama for analysis.
+        Works with medgemma model that supports vision.
+        """
+        with open(image_path, "rb") as f:
+            image_bytes = f.read()
+
+        response = await self.client.post(
+            f"{self.base_url}/api/generate",
+            json={
+                "model": "medgemma",
+                "prompt": prompt,
+                "images": [image_bytes.hex()],  # Ollama expects hex-encoded image
+                "stream": False,
+            }
+        )
+        response.raise_for_status()
+        return response.json()["response"]
+
+    async def close(self):
+        await self.client.aclose()
+```
+
+### Docker + Ollama (Production)
+
+For production with GPU:
+
+```bash
+# docker-compose.yml
+version: '3.8'
+services:
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    runtime: nvidia
+
+  app:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    depends_on:
+      - ollama
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+
+volumes:
+  ollama_data:
+```
+
+Without GPU (CPU only, slow):
+
+```bash
+# Just run Ollama directly on host, app in Docker connects to host network
+docker run -p 8000:8000 --network host your_app
 ```
 
 ### `backend/app/db/database.py`
@@ -128,10 +266,12 @@ These are **interface modules** — Dev 2 calls them, Dev 1 implements them:
 
 ```python
 # Dev 2 imports and calls Dev 1's modules:
-from backend.app.core.medgemma import extract_symptoms
+from backend.app.core.medgemma import extract_symptoms  # Uses OllamaClient internally
 from backend.app.core.vector_store import search_disease
 from backend.app.core.aggregation import aggregate_scores
 ```
+
+**Dev 1's medgemma module will call Ollama** (via httpx), not load model weights directly. This keeps the code simple — Ollama handles model management.
 
 ### `Dockerfile` + `docker-compose.yml`
 
@@ -141,10 +281,89 @@ Single container, volume mounts for `/data`:
 # backend/Dockerfile
 FROM python:3.11-slim
 WORKDIR /app
+
+# Install Ollama
+RUN curl -fsSL https://ollama.com/install.sh | sh
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+# Pull model on container start (or via init script)
+CMD ["sh", "-c", "ollama pull medgemma && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+```
+
+```yaml
+# docker-compose.yml (with Ollama)
+services:
+  app:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/data
+      - ollama_data:/root/.ollama
+    environment:
+      - DATA_DIR=/data
+      - OLLAMA_HOST=localhost:11434
+    runtime: nvidia  # Optional: only if GPU available
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+volumes:
+  ollama_data:
+```
+
+**Note**: GPU is strongly recommended for reasonable inference speed. Without GPU, CPU inference will be very slow (~30+ seconds per image).
+
+---
+
+## Quick Start Script
+
+A single script to set up everything:
+
+```bash
+#!/bin/bash
+# setup.sh - One-command setup for PrenatalAI
+
+set -e
+
+echo "Installing PrenatalAI..."
+
+# 1. Install Ollama
+echo "[1/4] Installing Ollama..."
+if command -v ollama &> /dev/null; then
+    echo "Ollama already installed"
+else
+    curl -fsSL https://ollama.com/install.sh | sh
+fi
+
+# 2. Pull MedGemma model
+echo "[2/4] Pulling MedGemma model (this may take a while on first run)..."
+ollama pull medgemma
+
+# 3. Start Ollama in background
+echo "[3/4] Starting Ollama server..."
+ollama serve &
+sleep 3  # Wait for server to start
+
+# 4. Install Python dependencies
+echo "[4/4] Installing Python dependencies..."
+pip install -r backend/requirements.txt
+
+echo ""
+echo "Setup complete! Run 'docker compose up' to start PrenatalAI."
+echo "Or run 'python -m uvicorn app.main:app' for development."
+```
+
+```bash
+# One-command setup (run from project root)
+bash setup.sh
 ```
 
 ---
@@ -232,14 +451,22 @@ router = APIRouter(prefix="/api/v1", tags=["diagnosis"])
 async def diagnose(
     images: list[UploadFile] = File(...),
     trimester: str = Form(...),
-    maternal_age: int = Form(...),
-    paternal_age: int | None = Form(None),
-    family_history: str = Form(""),
-    # ... other patient context fields
+    # First-trimester biomarkers
+    b_hcg: float | None = Form(None),       # IU/L, serum biomarker
+    papp_a: float | None = Form(None),        # IU/L, serum biomarker
+    mother_age: int = Form(...),              # Age at due date
+    gestational_age_weeks: float = Form(...), # Weeks since LMP
+    # Optional modifiers
+    fetal_count: int = Form(1),              # 1, 2, or 3
+    ivf_conception: bool = Form(False),
+    previous_affected_pregnancy: bool = Form(False),
 ):
     """
     Upload ultrasound images and get diagnosis.
     Returns fast track immediately, comprehensive scan runs in background.
+
+    First-trimester biomarkers (b-hCG, PAPP-A) are from blood test.
+    Gestational age from ultrasound CRL measurement.
     """
     # ... calls diagnosis service
     pass
@@ -315,9 +542,80 @@ def aggregate_scores(similarity_results, trimester, patient_context) -> list[Dia
 
 | Priority | Task |
 |----------|------|
-| 1 | `POST /diagnosis` returning a hardcoded mock response |
-| 2 | Single-container Docker running cleanly |
-| 3 | Service layer wiring Dev 1's output to the API |
-| 4 | Comprehensive scan via `BackgroundTasks` |
+| 1 | Ollama running MedGemma locally |
+| 2 | `POST /diagnosis` returning a hardcoded mock response |
+| 3 | Single-container Docker running cleanly |
+| 4 | Service layer wiring Dev 1's output to the API |
+| 5 | Comprehensive scan via `BackgroundTasks` |
 
 One disease (Down Syndrome), one trimester (1st), end-to-end, running offline via Docker.
+
+---
+
+## Troubleshooting
+
+### Ollama Issues
+
+```bash
+# Ollama not starting
+ollama serve  # Run manually to see error messages
+
+# Model won't download
+ollama pull medgemma  # Retry
+
+# GPU not detected (should see "using GPU" when running)
+nvidia-smi  # Check NVIDIA drivers installed
+ollama run medgemma "test"  # Look for GPU usage in output
+
+# Reset Ollama (if corrupted)
+rm -rf ~/.ollama
+ollama pull medgemma
+```
+
+### Docker Issues
+
+```bash
+# Build fails
+docker build --no-cache -t prenatal-ai ./backend
+
+# Port already in use
+docker compose down
+docker compose up
+
+# Volume permissions
+sudo chown -R $USER:$USER ./data
+```
+
+### API Connection Issues
+
+```bash
+# Test Ollama is running
+curl http://localhost:11434/api/tags
+
+# Test model is available
+curl http://localhost:11434/api/show -d '{"name":"medgemma"}'
+
+# Check app can reach Ollama
+python -c "import httpx; httpx.get('http://localhost:11434').raise_for_status()"
+```
+
+---
+
+## Dependencies
+
+```txt
+# backend/requirements.txt
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.6.0
+pydantic-settings>=2.1.0
+sqlalchemy>=2.0.0
+chromadb>=0.4.0
+httpx>=0.27.0
+pypdf>=4.0.0
+sentence-transformers>=2.4.0
+pydicom>=3.0.0
+Pillow>=10.0.0
+numpy>=1.24.0
+scipy>=1.12.0
+```
