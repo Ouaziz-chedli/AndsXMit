@@ -12,7 +12,23 @@ aggregation and priors modules.
 import io
 from typing import List, Optional, Union
 from dataclasses import dataclass
+import torch
 from .image_processor import load_ultrasound_image, image_to_bytes
+
+
+def detect_device() -> str:
+    """
+    Detect the best available hardware accelerator.
+
+    Checks for CUDA (NVIDIA) and MPS (Apple Silicon).
+    Defaults to 'cpu' if no accelerator is found.
+    """
+    if torch.cuda.is_available():
+        return "cuda"
+    # Check for Apple Silicon (MPS)
+    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
 
 
 @dataclass
@@ -50,17 +66,17 @@ class MedGemma:
     def __init__(
         self,
         model_path: Optional[str] = None,
-        device: str = "cpu"
+        device: Optional[str] = None
     ):
         """
         Initialize MedGemma model.
 
         Args:
             model_path: Path to MedGemma model weights (if None, uses default)
-            device: Device to run inference on ("cpu", "cuda", etc.)
+            device: Device to run inference on. If None, detects automatically.
         """
         self.model_path = model_path
-        self.device = device
+        self.device = device or detect_device()
         self._model = None
         self._is_loaded = False
 
@@ -286,14 +302,14 @@ _medgemma: Optional[MedGemma] = None
 
 def get_medgemma(
     model_path: Optional[str] = None,
-    device: str = "cpu"
+    device: Optional[str] = None
 ) -> MedGemma:
     """
     Get or create the global MedGemma instance.
 
     Args:
         model_path: Path to MedGemma model weights
-        device: Device to run inference on
+        device: Device to run inference on (None for auto-detection)
 
     Returns:
         MedGemma instance
