@@ -1,0 +1,190 @@
+{
+  "disease_id": "down_syndrome",
+  "disease_name": "Down Syndrome (Trisomy 21)",
+  "trimester": "1st",
+  "base_prevalence": 1.0,
+  "positive_cases": [
+    {
+      "case_id": "ds_pos_001",
+      "label": "positive",
+      "symptom_text": "nuchal_translucency_3_5mm absent_nasal_bone cardiac_av_canal_defect",
+      "gestational_age_weeks": 12.0,
+      "b_hcg_mom": 2.1,
+      "papp_a_mom": 0.48,
+      "equipment_manufacturer": "GE Healthcare",
+      "description": "Classic Down syndrome markers: elevated NT, absent nasal bone, AV canal"
+    },
+    {
+      "case_id": "ds_pos_002",
+      "label": "positive",
+      "symptom_text": "nuchal_translucency_4_0mm absent_nasal_bone short_femur echogenic_intracardiac_focus",
+      "gestational_age_weeks": 12.5,
+      "b_hcg_mom": 2.3,
+      "papp_a_mom": 0.42,
+      "equipment_manufacturer": "Philips",
+      "description": "Multiple markers: very high NT, absent nasal bone, short femur"
+    },
+    {
+      "case_id": "ds_pos_003",
+      "label": "positive",
+      "symptom_text": "nuchal_translucency_3_8mm absent_nasal_bone ventricular_septal_defect",
+      "gestational_age_weeks": 11.5,
+      "b_hcg_mom": 1.9,
+      "papp_a_mom": 0.52,
+      "equipment_manufacturer": "Siemens",
+      "description": "High NT with absent nasal bone and VSD"
+    },
+    {
+      "case_id": "ds_pos_004",
+      "label": "positive",
+      "symptom_text": "nuchal_translucency_2_9mm hypoplastic_nasal_bone echogenic_bowel",
+      "gestational_age_weeks": 13.0,
+      "b_hcg_mom": 2.0,
+      "papp_a_mom": 0.55,
+      "equipment_manufacturer": "GE Healthcare",
+      "description": "Borderline high NT with hypoplastic nasal bone"
+    },
+    {
+      "case_id": "ds_pos_005",
+      "label": "positive",
+      "symptom_text": "nuchal_translucency_3_2mm absent_nasal_bone mild_ventriculomegaly",
+      "gestational_age_weeks": 12.0,
+      "b_hcg_mom": 2.2,
+      "papp_a_mom": 0.45,
+      "equipment_manufacturer": "Philips",
+      "description": "Elevated NT with absent nasal bone and mild ventriculomegaly"
+    },
+    {
+      "case_id": "ds_pos_006",
+      "label": "positive",
+      "symptom_text": "nuchal_translucency_3_7mm absent_nasal_bone brachycephaly flattened_profile",
+      "gestational_age_weeks": 12.5,
+      "b_hcg_mom": 2.4,
+      "papp_a_mom": 0.38,
+      "equipment_manufacturer": "Siemens",
+      "description": "High NT with absent nasal bone and brachycephaly"
+    },
+    {
+      "case_id": "ds_pos_007",
+      "label": "positive",
+      "symptom_text": "nuchal_translucency_3_0mm absent_nasal_bone short_humerus increased_nuchal_fold",
+      "gestational_age_weeks": 11.0,
+      "b_hcg_mom": 1.8,
+      "papp_a_mom": 0.50,
+      "equipment_manufacturer": "GE Healthcare",
+      "description": "Elevated NT with absent nasal bone and short humerus"
+    },
+    {
+      "case_id": "ds_pos_008",
+      "label": "positive",
+      "symptom_text": "nuchal_translucency_3_3mm absent_nasal_bone renal_pelvis_dilatation",
+      "gestational_age_weeks": 13.0,
+      "b_hcg_mom": 2.1,
+      "papp_a_mom": 0.47,
+      "equipment_manufacturer": "Philips",
+      "description": "Elevated NT with absent nasal bone and renal pelvis dilatation"
+    }
+  ],
+  "negative_cases": [
+    {
+      "case_id": "ds_neg_001",
+      "label": "negative",
+      "symptom_text": "nuchal_translucency_1_8mm nasal_bone_present four_chamber_normal",
+      "gestational_age_weeks": 12.0,
+      "b_hcg_mom": 1.0,
+      "papp_a_mom": 1.0,
+      "equipment_manufacturer": "GE Healthcare",
+      "description": "Normal first trimester ultrasound"
+    },
+    {
+      "case_id": "ds_neg_002",
+      "label": "negative",
+      "symptom_text": "nuchal_translucency_1_5mm nasal_bone_present cardiac_normal femur_normal",
+      "gestational_age_weeks": 11.5,
+      "b_hcg_mom": 0.95,
+      "papp_a_mom": 1.05,
+      "equipment_manufacturer": "Philips",
+      "description": "Completely normal scan"
+    },
+    {
+      "case_id": "ds_neg_003",
+      "label": "negative",
+      "symptom_text": "nuchal_translucency_2_0mm nasal_bone_present heart_normal cranial_normal",
+      "gestational_age_weeks": 12.5,
+      "b_hcg_mom": 1.1,
+      "papp_a_mom": 0.95,
+      "equipment_manufacturer": "Siemens",
+      "description": "Normal NT at upper limit of normal"
+    },
+    {
+      "case_id": "ds_neg_004",
+      "label": "negative",
+      "symptom_text": "nuchal_translucency_1_7mm nasal_bone_present four_chamber_visualized",
+      "gestational_age_weeks": 13.0,
+      "b_hcg_mom": 0.98,
+      "papp_a_mom": 1.02,
+      "equipment_manufacturer": "GE Healthcare",
+      "description": "Normal scan at 13 weeks"
+    },
+    {
+      "case_id": "ds_neg_005",
+      "label": "negative",
+      "symptom_text": "nuchal_translucency_1_9mm nasal_bone_present cardiac_rhythm_normal limbs_normal",
+      "gestational_age_weeks": 11.0,
+      "b_hcg_mom": 1.02,
+      "papp_a_mom": 0.98,
+      "equipment_manufacturer": "Philips",
+      "description": "Normal anatomy completely visualized"
+    },
+    {
+      "case_id": "ds_neg_006",
+      "label": "negative",
+      "symptom_text": "nuchal_translucency_1_6mm nasal_bone_present normal_cerebellum normal_ventricles",
+      "gestational_age_weeks": 12.0,
+      "b_hcg_mom": 0.99,
+      "papp_a_mom": 1.01,
+      "equipment_manufacturer": "Siemens",
+      "description": "Normal intracranial anatomy"
+    },
+    {
+      "case_id": "ds_neg_007",
+      "label": "negative",
+      "symptom_text": "nuchal_translucency_1_8mm nasal_bone_present stomach_visualized kidneys_normal",
+      "gestational_age_weeks": 12.5,
+      "b_hcg_mom": 1.05,
+      "papp_a_mom": 0.95,
+      "equipment_manufacturer": "GE Healthcare",
+      "description": "Normal abdominal scan"
+    },
+    {
+      "case_id": "ds_neg_008",
+      "label": "negative",
+      "symptom_text": "nuchal_translucency_1_7mm nasal_bone_present umbilical_cord_normal amniotic_fluid_normal",
+      "gestational_age_weeks": 13.0,
+      "b_hcg_mom": 0.97,
+      "papp_a_mom": 1.03,
+      "equipment_manufacturer": "Philips",
+      "description": "Normal cord and fluid assessment"
+    },
+    {
+      "case_id": "ds_neg_009",
+      "label": "negative",
+      "symptom_text": "nuchal_translucency_1_5mm nasal_bone_present spine_normal bladder_visible",
+      "gestational_age_weeks": 11.5,
+      "b_hcg_mom": 1.0,
+      "papp_a_mom": 1.0,
+      "equipment_manufacturer": "Siemens",
+      "description": "Normal spine and bladder"
+    },
+    {
+      "case_id": "ds_neg_010",
+      "label": "negative",
+      "symptom_text": "nuchal_translucency_2_0mm nasal_bone_present limbs_proportional head_circumference_normal",
+      "gestational_age_weeks": 12.0,
+      "b_hcg_mom": 1.01,
+      "papp_a_mom": 0.99,
+      "equipment_manufacturer": "GE Healthcare",
+      "description": "Normal biometry measurements"
+    }
+  ]
+}
