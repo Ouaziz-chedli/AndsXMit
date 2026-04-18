@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     # Ollama settings (for Dev1's medgemma module)
     OLLAMA_HOST: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "medgemma"
+    OLLAMA_EMBEDDING_MODEL: str = "nomic-embed-text"
 
     # Image storage
     IMAGE_DIR: str = "/data/images"

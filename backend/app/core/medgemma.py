@@ -523,7 +523,8 @@ class MedGemma:
             Embedding vector as list of floats
         """
         if not self._is_ollama_available():
-            return [0.1] * 768
+            # Deterministic fallback based on image bytes hash
+            return [hash(image_bytes) % 100 / 100.0] * 768
 
         client = self._get_client()
 
@@ -535,7 +536,8 @@ class MedGemma:
         try:
             return await client.generate_embeddings(text)
         except Exception:
-            return [0.1] * 768
+            # Deterministic fallback based on text hash
+            return [hash(text) % 100 / 100.0] * 768
 
     def embed_symptoms(self, symptom_text: str) -> List[float]:
         """

@@ -108,12 +108,17 @@ class OllamaClient:
         response.raise_for_status()
         return response.json()["response"]
 
-    async def generate_embeddings(self, text: str) -> list[float]:
+    async def generate_embeddings(
+        self,
+        text: str,
+        embedding_model: str | None = None,
+    ) -> list[float]:
         """
         Generate text embeddings using Ollama's embedding endpoint.
 
         Args:
             text: Text to embed
+            embedding_model: Model to use for embeddings (defaults to OLLAMA_EMBEDDING_MODEL)
 
         Returns:
             Embedding vector
@@ -121,11 +126,15 @@ class OllamaClient:
         Raises:
             httpx.HTTPError: If Ollama fails and no fallback is available
         """
+        from app.config import settings
+
+        model = embedding_model or settings.OLLAMA_EMBEDDING_MODEL
+
         try:
             response = await self.client.post(
                 f"{self.base_url}/api/embeddings",
                 json={
-                    "model": self.model,
+                    "model": model,
                     "prompt": text,
                 },
             )
