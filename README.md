@@ -13,7 +13,8 @@
 5. [French Prenatal Ultrasound Context](#french-prenatal-ultrasound-context)
 6. [Medical Context: Disease Detection Methods](#medical-context-disease-detection-methods)
 7. [Technology Philosophy](#technology-philosophy)
-8. [Vision & Goals](#vision--goals)
+8. [Risks & Concerns](#risks--concerns)
+9. [Vision & Goals](#vision--goals)
 
 ---
 
@@ -544,6 +545,41 @@ PrenatalAI aims to **reduce unnecessary invasive procedures** by providing bette
 - Similarity scores visible per retrieved case
 - Trimester weights and patient context factors disclosed
 - Audit trails for medical liability
+
+---
+
+## Risks & Concerns
+
+### ⚠️ Known Risks
+
+| Risk | Severity | Issue |
+|------|----------|-------|
+| **MedGemma trained on radiology, not ultrasound** | **HIGH** | MedGemma was trained on CT, MRI, chest X-rays. Ultrasound has different image characteristics (noise, angles, artifacts). May underperform on prenatal images. |
+| **Score ≠ calibrated probability** | **HIGH** | A score of 0.66 doesn't mean "66% chance of disease." No discussion of threshold calibration. In medicine, calibrated probabilities are essential for clinical decisions. |
+| **Vector similarity ≠ diagnosis** | **MEDIUM** | Embedding similarity measures visual resemblance, not medical significance. Subtle markers that are critical for diagnosis may be lost in embedding space. |
+| **Bootstrapping problem** | **MEDIUM** | Need data to be useful, but need to be useful to attract data. Community platform starts empty. |
+| **False negatives = missed diagnosis** | **HIGH** | Medical context — a miss can have serious consequences. System needs validated sensitivity/specificity before clinical use. |
+| **Latency** | **LOW** | Multiple vector DB queries + MedGemma inference — may be slow without optimization. |
+
+### 🔧 Recommended Mitigations
+
+1. **Test MedGemma on ultrasound first** — Run a quick experiment before committing. If it fails on ultrasound, the whole architecture needs revision.
+
+2. **Calibrate probabilities** — Use a validation dataset to convert similarity scores to real probabilities (e.g., "score 0.6 = 73% accuracy").
+
+3. **Add uncertainty quantification** — Instead of a single score, show confidence intervals.
+
+4. **Add "Uncertain" category** — Cases where neither disease nor normal match well → flag for doctor review.
+
+5. **Medical supervision required** — System should explicitly say "AI-assisted, not AI-diagnosis."
+
+### 📊 Viability Assessment
+
+| For Hackaton | For Production |
+|--------------|---------------|
+| **Viable as prototype/demo** | **Needs significant validation** |
+
+The architecture is well-designed conceptually. The main risk is MedGemma's applicability to ultrasound — this needs empirical testing. If MedGemma works on ultrasounds, the approach is solid. If not, consider alternative vision-language models (e.g., BiomedCLIP, or a model specifically trained on ultrasound).
 
 ---
 
