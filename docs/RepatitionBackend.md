@@ -2,88 +2,132 @@
 
 UI/UX and Marketing are handled by a separate team.
 
+## Core Constraint: Fully Self-Hostable
+
+The hackathon app must run entirely on a hospital's own machine — no cloud, no external APIs, no managed services. A doctor should be able to run `docker compose up` and have everything working offline.
+
+Complexity is only justified when it directly serves this goal. If a simpler tool does the job, use it.
+
+### Stack Decisions
+
+| Need | Simple choice | Ruled out |
+|------|--------------|-----------|
+| Relational metadata | **SQLite** (file on disk, zero infra) | PostgreSQL — needs a server |
+| Async comprehensive scan | **FastAPI `BackgroundTasks`** (built-in) | Celery + Redis — two extra services for no gain at this scale |
+| Vector storage | **ChromaDB embedded** (`PersistentClient`, writes to disk) | ChromaDB server container — unnecessary when one process owns the DB |
+| Image storage | **Local filesystem** (Docker volume) | MinIO/S3 — cloud concept, irrelevant for self-hosting |
+| AI inference | **MedGemma local** (mandatory) | MedGemma API — breaks self-hosting |
+
+### Target Deployment
+
+```
+docker compose up
+```
+
+Runs a **single container** with everything inside it:
+- FastAPI app
+- ChromaDB embedded (persists to `/data/vector_db` volume)
+- SQLite (persists to `/data/db.sqlite` volume)
+- MedGemma weights (mounted or pulled on first start into `/data/models`)
+- Uploaded images (persists to `/data/images` volume)
+
+```yaml
+# docker-compose.yml (target)
+services:
+  app:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/data          # vector DB, SQLite, images, model weights
+    environment:
+      - DATA_DIR=/data
+      - MEDGEMMA_MODEL_PATH=/data/models/medgemma
+```
+
+No other services. One container, one volume, runs offline.
+
 ---
 
 ## Dev 1 — AI/ML Pipeline (Bottom-Up)
 
-**Owns**: everything from image → symptom extraction → vector search → final scores (no API layer)
+**Owns**: image → MedGemma symptom extraction → ChromaDB vector search → scored results
 
-### Tasks
+### Phase 1: Foundation (define first — Dev 2 depends on these models)
 
-**Phase 1: Foundation (do first — others depend on it)**
-- Define and finalize Pydantic models in `backend/app/models/` (`DiagnosisQuery`, `PatientContext`, `DiagnosisResult`, `DiseaseCase`) — this is the **contract** with Dev 2
-- `backend/app/core/medgemma.py` — MedGemma integration (local inference + API fallback), symptom extraction from images
-- `backend/app/core/vector_store.py` — ChromaDB abstraction (init per-disease collections, upsert, similarity search)
+- Pydantic models in `backend/app/models/` — `DiagnosisQuery`, `PatientContext`, `DiagnosisResult`, `DiseaseCase`
+- `backend/app/core/medgemma.py` — local MedGemma inference only (no API fallback; self-hosting is non-negotiable)
+- `backend/app/core/vector_store.py` — ChromaDB `PersistentClient` abstraction (collections per disease, upsert, similarity search)
 
-**Phase 2: Core Engine**
-- `backend/app/core/scoring.py` — raw score calculation (`avg(pos) - avg(neg)`)
+### Phase 2: Core Engine
+
+- `backend/app/core/scoring.py` — `avg(positive_sims) - avg(negative_sims)`
 - `backend/app/core/aggregation.py` — trimester weighting + symptom overlap distribution
-- `backend/app/core/priors.py` — Bayesian prior multipliers (maternal age, family history, IVF)
+- `backend/app/core/priors.py` — Bayesian multipliers (maternal age, family history, IVF)
 
-**Phase 3: Data**
-- `backend/scripts/compute_embeddings.py` — pre-compute embeddings for seeded cases
-- `backend/scripts/seed_diseases.py` — initialize `data/diseases.json`, `trimester_weights.json`, `priors_config.json`
-- `backend/scripts/seed_mock_data.py` — mock positive/negative cases for Down Syndrome (1st trimester) for demo
-- `data/` — populate `diseases.json` with Down Syndrome as MVP disease
+### Phase 3: Data
 
-**Phase 4: Tests**
+- `backend/scripts/seed_diseases.py` — populate `data/diseases.json`, `trimester_weights.json`, `priors_config.json`
+- `backend/scripts/seed_mock_data.py` — mock positive + negative Down Syndrome cases (1st trimester)
+- `backend/scripts/compute_embeddings.py` — pre-compute and load embeddings into ChromaDB
+
+### Phase 4: Tests
+
 - `backend/tests/test_aggregation.py`
-- `backend/tests/test_medgemma.py` (mocked)
+- `backend/tests/test_medgemma.py` (with a real small image, or mocked if model load is slow)
 
 ---
 
-## Dev 2 — Backend API + Infrastructure (Top-Down)
+## Dev 2 — API + Infrastructure (Top-Down)
 
-**Owns**: FastAPI app, all endpoints, async jobs, DB, Docker — calls into Dev 1's core modules via services
+**Owns**: FastAPI app, endpoints, SQLite, background tasks, Docker — calls Dev 1's core modules
 
-### Tasks
+### Phase 1: Foundation (parallel with Dev 1's Phase 1)
 
-**Phase 1: Foundation (do in parallel with Dev 1's Phase 1)**
-- `backend/app/main.py` + `config.py` — FastAPI app bootstrap, settings (env vars, DB URLs, etc.)
-- `docker-compose.yml` — PostgreSQL + Redis + ChromaDB + app
-- `backend/app/db/database.py` — SQLAlchemy setup + connection pooling
+- `backend/app/main.py` + `config.py` — FastAPI bootstrap, settings from env vars (`DATA_DIR`, `MEDGEMMA_MODEL_PATH`)
+- `backend/app/db/database.py` — SQLAlchemy with SQLite (`sqlite:////{DATA_DIR}/db.sqlite`)
 - `backend/app/db/repositories.py` — CRUD for `CommunityCase`, `Contributor`, `Disease`
+- `Dockerfile` + `docker-compose.yml` — single container, volume mounts for `/data`
 
-**Phase 2: Services Layer (after Dev 1 has models)**
-- `backend/app/services/diagnosis.py` — orchestrates fast track + background comprehensive scan, calls `core/medgemma.py` and `core/aggregation.py`
-- `backend/app/services/case_upload.py` — validates upload, calls anonymizer, triggers embedding computation
-- `backend/app/services/validation.py` — admin case validation workflow
+### Phase 2: Services Layer (after Dev 1 has models)
 
-**Phase 3: API Endpoints**
+- `backend/app/services/diagnosis.py` — fast track (sync) + comprehensive scan (`BackgroundTasks`, not Celery)
+- `backend/app/services/case_upload.py` — validates upload, anonymizes, saves image to `/data/images`, triggers embedding
+- `backend/app/services/validation.py` — admin case validation
+
+### Phase 3: API Endpoints
+
 - `backend/app/api/diagnosis.py` — `POST /api/v1/diagnosis`, `GET /api/v1/diagnosis/{id}/comprehensive`
 - `backend/app/api/cases.py` — `POST /api/v1/cases`, `GET /api/v1/cases`
 - `backend/app/api/diseases.py` — `GET /api/v1/diseases`, `GET /api/v1/diseases/{id}/weights`
-- `backend/app/api/vector.py` — internal vector search/index endpoints
 
-**Phase 4: Async + Storage**
-- Celery + Redis worker setup for comprehensive background scan
-- `backend/app/db/s3.py` — MinIO/S3 client for image storage
-- `backend/tests/test_api.py` + `test_integration.py`
+### Phase 4: Tests
+
+- `backend/tests/test_api.py`
+- `backend/tests/test_integration.py`
 
 ---
 
-## Interface Contract (Define Day 1)
-
-Dev 2 calls Dev 1's services through these boundaries — agree on these before splitting:
+## Interface Contract (Agree Day 1)
 
 ```python
-# Dev 1 exposes, Dev 2 calls:
+# Dev 1 exposes, Dev 2 calls via services:
 async def extract_symptoms(image_bytes: bytes) -> SymptomDescription: ...
 async def search_disease(query_embedding, disease_id, trimester, top_k) -> list[RetrievedCase]: ...
 def aggregate_scores(similarity_results, trimester, patient_context) -> list[DiagnosisResult]: ...
 ```
 
-Both devs agree on the Pydantic models in `backend/app/models/` **on day 1** — that's the only real dependency.
+Pydantic models in `backend/app/models/` are the only hard dependency between the two devs — agree on these before splitting.
 
 ---
 
 ## Hackathon MVP Priority
 
-Focus on **Down Syndrome, 1st Trimester** end-to-end before expanding:
+One disease (Down Syndrome), one trimester (1st), end-to-end, running offline via Docker.
 
 | Priority | Dev 1 | Dev 2 |
 |----------|-------|-------|
-| 1 | MedGemma working on a sample image | `POST /diagnosis` endpoint returning mock response |
-| 2 | ChromaDB seeded with mock Down Syndrome cases | Docker compose running cleanly |
-| 3 | Aggregation + scoring producing ranked output | Service layer wiring it all together |
-| 4 | Priors for maternal age | Comprehensive scan background task |
+| 1 | MedGemma extracting symptoms from a sample image | `POST /diagnosis` returning a hardcoded mock response |
+| 2 | ChromaDB seeded with mock Down Syndrome cases | Single-container Docker running cleanly |
+| 3 | Aggregation + scoring producing a ranked result | Service layer wiring Dev 1's output to the API |
+| 4 | Priors for maternal age | Comprehensive scan via `BackgroundTasks` |
