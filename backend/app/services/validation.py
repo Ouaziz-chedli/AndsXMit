@@ -9,8 +9,6 @@ from typing import List, Optional, Dict
 from dataclasses import dataclass, field
 from enum import Enum
 
-from .case_upload import UploadedCaseData
-
 
 class Severity(Enum):
     """Severity level of validation issues."""
@@ -52,6 +50,13 @@ class ValidationResult:
         return [i for i in self.issues if i.severity == Severity.INFO]
 
 
+# Import UploadedCaseData for type checking
+try:
+    from .case_upload import UploadedCaseData
+except ImportError:
+    UploadedCaseData = None
+
+
 class ValidationService:
     """Service for validating case submissions."""
 
@@ -86,10 +91,7 @@ class ValidationService:
     MOTHER_AGE_RANGE = (12, 60)
 
     @classmethod
-    def validate_case_submission(
-        cls,
-        case_data: UploadedCaseData,
-    ) -> ValidationResult:
+    def validate_case_submission(cls, case_data) -> ValidationResult:
         """
         Validate a complete case submission.
 
@@ -100,6 +102,10 @@ class ValidationService:
             ValidationResult with all issues found
         """
         result = ValidationResult(is_valid=True)
+
+        if case_data is None:
+            result.add_issue(Severity.ERROR, "case_data", "Case data is required")
+            return result
 
         # Validate required fields
         cls._validate_required_fields(case_data, result)
@@ -120,17 +126,13 @@ class ValidationService:
         return result
 
     @classmethod
-    def _validate_required_fields(
-        cls,
-        case_data: UploadedCaseData,
-        result: ValidationResult,
-    ) -> None:
+    def _validate_required_fields(cls, case_data, result: ValidationResult) -> None:
         """Validate that all required fields are present."""
         required_fields = {
-            "disease_id": case_data.disease_id,
-            "trimester": case_data.trimester,
-            "label": case_data.label,
-            "images": case_data.images,
+            "disease_id": getattr(case_data, 'disease_id', None),
+            "trimester": getattr(case_data, 'trimester', None),
+            "label": getattr(case_data, 'label', None),
+            "images": getattr(case_data, 'images', None),
         }
 
         for field_name, field_value in required_fields.items():
@@ -142,13 +144,9 @@ class ValidationService:
                 )
 
     @classmethod
-    def _validate_disease_id(
-        cls,
-        disease_id: str,
-        result: ValidationResult,
-    ) -> None:
+    def _validate_disease_id(cls, disease_id: str, result: ValidationResult) -> None:
         """Validate disease ID."""
-        if disease_id not in cls.VALID_DISEASES:
+        if disease_id and disease_id not in cls.VALID_DISEASES:
             result.add_issue(
                 Severity.ERROR,
                 "disease_id",
@@ -156,13 +154,9 @@ class ValidationService:
             )
 
     @classmethod
-    def _validate_trimester(
-        cls,
-        trimester: str,
-        result: ValidationResult,
-    ) -> None:
+    def _validate_trimester(cls, trimester: str, result: ValidationResult) -> None:
         """Validate trimester value."""
-        if trimester not in cls.VALID_TRIMESTERS:
+        if trimester and trimester not in cls.VALID_TRIMESTERS:
             result.add_issue(
                 Severity.ERROR,
                 "trimester",
@@ -170,13 +164,9 @@ class ValidationService:
             )
 
     @classmethod
-    def _validate_label(
-        cls,
-        label: str,
-        result: ValidationResult,
-    ) -> None:
+    def _validate_label(cls, label: str, result: ValidationResult) -> None:
         """Validate label (positive/negative)."""
-        if label not in cls.VALID_LABELS:
+        if label and label not in cls.VALID_LABELS:
             result.add_issue(
                 Severity.ERROR,
                 "label",
@@ -184,16 +174,11 @@ class ValidationService:
             )
 
     @classmethod
-    def _validate_gestational_age(
-        cls,
-        case_data: UploadedCaseData,
-        result: ValidationResult,
-    ) -> None:
+    def _validate_gestational_age(cls, case_data, result: ValidationResult) -> None:
         """Validate gestational age."""
-        gestational_age = case_data.gestational_age_weeks
+        gestational_age = getattr(case_data, 'gestational_age_weeks', None)
 
         if gestational_age is None:
-            # Warning if not provided
             result.add_issue(
                 Severity.WARNING,
                 "gestational_age_weeks",
@@ -201,7 +186,6 @@ class ValidationService:
             )
             return
 
-        # Check range
         if gestational_age < 0 or gestational_age > 50:
             result.add_issue(
                 Severity.ERROR,
@@ -209,8 +193,7 @@ class ValidationService:
                 f"Gestational age out of valid range: {gestational_age}"
             )
 
-        # Check consistency with trimester
-        trimester = case_data.trimester
+        trimester = getattr(case_data, 'trimester', None)
         if trimester in cls.GESTATIONAL_AGE_RANGES:
             min_age, max_age = cls.GESTATIONAL_AGE_RANGES[trimester]
             if gestational_age < min_age or gestational_age > max_age:
@@ -222,41 +205,33 @@ class ValidationService:
                 )
 
     @classmethod
-    def _validate_biomarkers(
-        cls,
-        case_data: UploadedCaseData,
-        result: ValidationResult,
-    ) -> None:
+    def _validate_biomarkers(cls, case_data, result: ValidationResult) -> None:
         """Validate biomarker values."""
-        # Validate b-hCG
-        if case_data.b_hcg is not None:
-            if not cls.B_HCG_RANGE[0] <= case_data.b_hcg <= cls.B_HCG_RANGE[1]:
+        b_hcg = getattr(case_data, 'b_hcg', None)
+        papp_a = getattr(case_data, 'papp_a', None)
+
+        if b_hcg is not None:
+            if not cls.B_HCG_RANGE[0] <= b_hcg <= cls.B_HCG_RANGE[1]:
                 result.add_issue(
                     Severity.WARNING,
                     "b_hcg",
-                    f"b-hCG value {case_data.b_hcg} outside typical range"
+                    f"b-hCG value {b_hcg} outside typical range"
                 )
 
-        # Validate PAPP-A
-        if case_data.papp_a is not None:
-            if not cls.PAPP_A_RANGE[0] <= case_data.papp_a <= cls.PAPP_A_RANGE[1]:
+        if papp_a is not None:
+            if not cls.PAPP_A_RANGE[0] <= papp_a <= cls.PAPP_A_RANGE[1]:
                 result.add_issue(
                     Severity.WARNING,
                     "papp_a",
-                    f"PAPP-A value {case_data.papp_a} outside typical range"
+                    f"PAPP-A value {papp_a} outside typical range"
                 )
 
     @classmethod
-    def _validate_mother_age(
-        cls,
-        case_data: UploadedCaseData,
-        result: ValidationResult,
-    ) -> None:
+    def _validate_mother_age(cls, case_data, result: ValidationResult) -> None:
         """Validate mother age."""
-        mother_age = case_data.mother_age
+        mother_age = getattr(case_data, 'mother_age', None)
 
         if mother_age is None:
-            # Optional field
             return
 
         if not cls.MOTHER_AGE_RANGE[0] <= mother_age <= cls.MOTHER_AGE_RANGE[1]:
@@ -267,13 +242,9 @@ class ValidationService:
             )
 
     @classmethod
-    def _validate_images(
-        cls,
-        case_data: UploadedCaseData,
-        result: ValidationResult,
-    ) -> None:
+    def _validate_images(cls, case_data, result: ValidationResult) -> None:
         """Validate image list."""
-        images = case_data.images
+        images = getattr(case_data, 'images', None)
 
         if not images:
             result.add_issue(
@@ -290,27 +261,12 @@ class ValidationService:
                 f"Large number of images: {len(images)}. Consider reducing."
             )
 
-        # Check if image files exist
-        import os
-        missing_files = [img for img in images if not os.path.exists(img)]
-        if missing_files:
-            result.add_issue(
-                Severity.ERROR,
-                "images",
-                f"Image files not found: {missing_files}"
-            )
-
     @classmethod
-    def _validate_symptoms(
-        cls,
-        case_data: UploadedCaseData,
-        result: ValidationResult,
-    ) -> None:
+    def _validate_symptoms(cls, case_data, result: ValidationResult) -> None:
         """Validate symptom text if provided."""
-        symptom_text = case_data.symptom_text
+        symptom_text = getattr(case_data, 'symptom_text', None)
 
         if symptom_text is None:
-            # Optional field
             return
 
         if len(symptom_text) < 5:
@@ -328,84 +284,34 @@ class ValidationService:
             )
 
     @classmethod
-    def _validate_consistency(
-        cls,
-        case_data: UploadedCaseData,
-        result: ValidationResult,
-    ) -> None:
+    def _validate_consistency(cls, case_data, result: ValidationResult) -> None:
         """Validate overall consistency of the case."""
-        # Check positive label with biomarkers
-        if case_data.label == "positive":
-            # For positive cases, biomarkers should be provided
-            if case_data.b_hcg is None and case_data.papp_a is None:
+        label = getattr(case_data, 'label', None)
+        disease_id = getattr(case_data, 'disease_id', None)
+        b_hcg = getattr(case_data, 'b_hcg', None)
+        papp_a = getattr(case_data, 'papp_a', None)
+
+        if label == "positive":
+            if b_hcg is None and papp_a is None:
                 result.add_issue(
                     Severity.INFO,
                     "consistency",
                     "Positive case without biomarkers. Consider adding for better priors."
                 )
 
-        # Check Down syndrome pattern
-        if case_data.disease_id == "down_syndrome" and case_data.label == "positive":
-            if case_data.b_hcg and case_data.papp_a:
-                # Calculate approximate MoM
-                b_hcg_mom = case_data.b_hcg / 50000.0
-                papp_a_mom = case_data.papp_a / 1500.0
-
-                # Classic pattern: high b-hCG, low PAPP-A
-                if b_hcg_mom < 1.0 and papp_a_mom > 1.0:
-                    result.add_issue(
-                        Severity.INFO,
-                        "consistency",
-                        "Biomarkers do not show typical Down syndrome pattern"
-                    )
-
-    @classmethod
-    def format_validation_result(
-        cls,
-        result: ValidationResult,
-    ) -> Dict:
-        """
-        Format validation result as dictionary.
-
-        Args:
-            result: ValidationResult to format
-
-        Returns:
-            Dictionary with formatted result
-        """
-        return {
-            "is_valid": result.is_valid,
-            "error_count": len(result.get_errors()),
-            "warning_count": len(result.get_warnings()),
-            "info_count": len(result.get_info()),
-            "errors": [
-                {
-                    "field": issue.field,
-                    "message": issue.message,
-                }
-                for issue in result.get_errors()
-            ],
-            "warnings": [
-                {
-                    "field": issue.field,
-                    "message": issue.message,
-                }
-                for issue in result.get_warnings()
-            ],
-            "info": [
-                {
-                    "field": issue.field,
-                    "message": issue.message,
-                }
-                for issue in result.get_info()
-            ],
-        }
+        if disease_id == "down_syndrome" and label == "positive" and b_hcg and papp_a:
+            b_hcg_mom = b_hcg / 50000.0
+            papp_a_mom = papp_a / 1500.0
+            if b_hcg_mom < 1.0 and papp_a_mom > 1.0:
+                result.add_issue(
+                    Severity.INFO,
+                    "consistency",
+                    "Biomarkers do not show typical Down syndrome pattern"
+                )
 
 
-# Convenience function
-def validate_case_submission(
-    case_data: UploadedCaseData,
-) -> ValidationResult:
+# Convenience functions
+def validate_case_submission(case_data) -> ValidationResult:
     """
     Validate a case submission.
 
@@ -418,26 +324,28 @@ def validate_case_submission(
     return ValidationService.validate_case_submission(case_data)
 
 
-if __name__ == "__main__":
-    # Example usage
-    from .case_upload import UploadedCaseData
+def validate_case(
+    db,
+    case_id: str,
+    validator_id: str,
+    approved: bool,
+) -> dict:
+    """
+    Mark case as validated (or rejected) by admin.
 
-    valid_case = UploadedCaseData(
-        disease_id="down_syndrome",
-        trimester="1st",
-        label="positive",
-        images=["/path/to/image.png"],
-        gestational_age_weeks=12.0,
-        b_hcg=100000.0,
-        papp_a=750.0,
-        mother_age=35,
-    )
+    In production, would check validator permissions.
+    """
+    from app.db import CaseRepository
 
-    result = validate_case_submission(valid_case)
+    case_repo = CaseRepository(db)
+    case = case_repo.get_by_id(case_id)
 
-    print(f"Valid: {result.is_valid}")
-    print(f"Errors: {len(result.get_errors())}")
-    print(f"Warnings: {len(result.get_warnings())}")
+    if not case:
+        return {"success": False, "error": "Case not found"}
 
-    for issue in result.issues:
-        print(f"  {issue.severity.value.upper()} [{issue.field}]: {issue.message}")
+    if approved:
+        case.validated = True
+        db.commit()
+        return {"success": True, "case_id": case_id, "status": "approved"}
+    else:
+        return {"success": True, "case_id": case_id, "status": "rejected"}

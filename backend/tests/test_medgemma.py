@@ -292,9 +292,10 @@ class TestResetMedGemma:
 class TestExtractSymptomsFromBytes:
     """Tests for extract_symptoms_from_bytes convenience function."""
 
-    def test_extracts_symptoms(self, reset_model, sample_image_bytes):
+    @pytest.mark.asyncio
+    async def test_extracts_symptoms(self, reset_model, sample_image_bytes):
         """Test that function extracts symptoms."""
-        description = extract_symptoms_from_bytes(
+        description = await extract_symptoms_from_bytes(
             image_bytes=sample_image_bytes,
             trimester="1st",
             gestational_age_weeks=12.0,
@@ -303,13 +304,14 @@ class TestExtractSymptomsFromBytes:
         assert isinstance(description, SymptomDescription)
         assert description.trimester == "1st"
 
-    def test_uses_global_model(self, reset_model, sample_image_bytes):
+    @pytest.mark.asyncio
+    async def test_uses_global_model(self, reset_model, sample_image_bytes):
         """Test that function uses the global model."""
         # Get global model
         model = get_medgemma()
 
         # Extract via convenience function
-        extract_symptoms_from_bytes(sample_image_bytes, "1st")
+        await extract_symptoms_from_bytes(sample_image_bytes, "1st")
 
         # Global model should be loaded
         assert model._is_loaded is True

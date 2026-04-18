@@ -28,6 +28,8 @@ class DiagnosisResult(BaseModel):
     final_score: float
     confidence_interval: Tuple[float, float]
     applied_priors: List[str]
+    matching_positive_cases: List[dict] = []
+    matching_negative_cases: List[dict] = []
 
 
 class DiagnosisQuery(BaseModel):
@@ -41,3 +43,22 @@ class DiagnosisReport(BaseModel):
     comprehensive: Optional[List[DiagnosisResult]] = None
     processing_time_ms: int
     timestamp: datetime
+
+
+class DiagnosisResponse(BaseModel):
+    """Response from diagnosis endpoint."""
+
+    fast_track: list[DiagnosisResult]
+    comprehensive_pending: bool
+    comprehensive_callback_url: str | None = None
+    fast_track_ms: int
+    timestamp: datetime
+
+
+class ComprehensiveResult(BaseModel):
+    """Comprehensive scan result (async)."""
+
+    task_id: str
+    status: Literal["pending", "completed", "failed"]
+    results: list[DiagnosisResult] | None = None
+    completed_at: datetime | None = None

@@ -10,7 +10,7 @@ Key insight: b-hCG and PAPP-A MoM values indicate chromosomal risk:
 """
 
 from typing import Union
-from ...models.patient import PatientContext, PatientContextMoM
+from ..models.patient import PatientContext, PatientContextMoM
 
 
 # Population medians for risk calculation
