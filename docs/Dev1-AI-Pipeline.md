@@ -45,14 +45,55 @@ class DiagnosisQuery(BaseModel):
     patient_context: PatientContext
 
 class PatientContext(BaseModel):
-    maternal_age: int
-    paternal_age: int | None = None
-    family_history: list[str] = []
-    genetic_history: list[str] = []
-    previous_pregnancies: list[PregnancyOutcome] = []
-    ethnicity: str | None = None
+    """
+    First-trimester screening context.
+    Based on French NT-prenatal screening protocol (11-14 weeks).
+
+    Key biomarkers:
+    - b-hCG (IU/L) - beta human chorionic gonadotropin
+    - PAPP-A (IU/L) - Pregnancy-associated plasma protein A
+    - Mother age at due date
+    - Gestational age in weeks (from CRL or exam date)
+    """
+    b_hcg: float | None = None          # IU/L, serum biomarker
+    papp_a: float | None = None          # IU/L, serum biomarker
+    mother_age: int                       # Age at due date
+    gestational_age_weeks: float           # Weeks since LMP/conception
+    # Optional modifiers
+    fetal_count: Literal[1, 2, 3] = 1    # Singleton/twin/triplet
+    ivf_conception: bool = False         # Assisted reproduction
+    previous_affected_pregnancy: bool = False  # Prior chromosomal anomaly
+
+    def to_mom(self) -> "PatientContextMoM":
+        """
+        Convert raw values to MoM (Multiple of Median).
+        MoM normalizes for gestational age and gives population-relative values.
+        """
+        # Median values at 10 weeks (typical first-trimester screening timing)
+        MEDIAN_B_HCG = 50000.0  # IU/L
+        MEDIAN_PAPP_A = 1500.0  # IU/L
+        return PatientContextMoM(
+            b_hcg_mom=self.b_hcg / MEDIAN_B_HCG if self.b_hcg else None,
+            papp_a_mom=self.papp_a / MEDIAN_PAPP_A if self.papp_a else None,
+            mother_age=self.mother_age,
+            gestational_age_weeks=self.gestational_age_weeks,
+            fetal_count=self.fetal_count,
+            ivf_conception=self.ivf_conception,
+            previous_affected_pregnancy=self.previous_affected_pregnancy,
+        )
+
+class PatientContextMoM(BaseModel):
+    """
+    MoM-normalized patient context for risk calculation.
+    Using Multiple of Median removes gestational age dependency from biomarkers.
+    """
+    b_hcg_mom: float | None = None
+    papp_a_mom: float | None = None
+    mother_age: int
+    gestational_age_weeks: float
+    fetal_count: Literal[1, 2, 3] = 1
     ivf_conception: bool = False
-    vt
+    previous_affected_pregnancy: bool = False
 
 
 class DiagnosisResult(BaseModel):
@@ -68,7 +109,10 @@ class DiseaseCase(BaseModel):
     trimester: Literal["1st", "2nd", "3rd"]
     label: Literal["positive", "negative"]
     symptom_text: str
-    gestational_age_weeks: int
+    gestational_age_weeks: float
+    # Stored as MoM for consistent matching
+    b_hcg_mom: float | None = None
+    papp_a_mom: float | None = None
 ```
 
 ### Core Modules
@@ -122,19 +166,120 @@ def aggregate_scores(raw_score: float, disease: str, trimester: str) -> float:
 
 ### `backend/app/core/priors.py`
 
-Bayesian multipliers (maternal age, family history, IVF):
+Biomarker-based prior calculation using MoM values:
 
 ```python
-PRIOR_MULTIPLIERS = {
-    "maternal_age_35_plus": {"chromosomal": 1.5, "cardiac": 1.1},
-    "maternal_age_40_plus": {"chromosomal": 2.0, "cardiac": 1.2},
-    "family_history": {"specific_disease": 2.5},
-    "ivf": {"chromosomal": 1.3},
-}
+"""
+First-trimester chromosomal risk priors based on biomarkers and maternal age.
+Based on French NT-prenatal screening protocol.
 
-def apply_priors(weighted_score: float, disease: str, context: PatientContext) -> float:
+Key insight: b-hCG and PAPP-A MoM values indicate chromosomal risk:
+- Low PAPP-A + High b-hCG → increased Down syndrome risk
+- Both low → increased T18/T13 risk
+"""
+
+from scipy.stats import norm
+
+# Population medians for risk calculation
+MEDIAN_MOTHER_AGE_RISK = 37.0  # Age where risk starts increasing significantly
+TRISOMY_21_BASE_RISK = 800      # 1 in 800 at maternal age 30
+
+def calculate_age_risk(mother_age: int) -> float:
+    """
+    Calculate age-based prior risk for chromosomal abnormality.
+    Risk doubles every 2.5 years after age 25.
+    Returns: risk multiplier relative to baseline
+    """
+    if mother_age < 30:
+        return 1.0
+    # Approximation of maternal age risk curve
+    # Risk at 30: 1/800, at 35: 1/270, at 40: 1/100
+    risk_factor = 800 / max(100, 800 - 10 * (mother_age - 30) ** 2)
+    return min(risk_factor, 5.0)  # Cap at 5x
+
+def calculate_biomarker_risk(
+    b_hcg_mom: float | None,
+    papp_a_mom: float | None,
+) -> float:
+    """
+    Calculate biomarker-based risk modifier.
+    Based on MoM values relative to expected medians.
+
+    Typical patterns:
+    - Down syndrome: b-hCG MoM elevated (~2.0), PAPP-A MoM low (~0.5)
+    - Edwards (T18): both b-hCG and PAPP-A low
+    - Patau (T13): both b-hCG and PAPP-A low
+    """
+    if b_hcg_mom is None and papp_a_mom is None:
+        return 1.0
+
+    risk = 1.0
+
+    # b-hCG risk modifier
+    if b_hcg_mom is not None:
+        if b_hcg_mom > 2.0:
+            # High b-hCG suggests Down syndrome
+            risk *= 1.5
+        elif b_hcg_mom < 0.25:
+            # Very low b-hCG suggests T18/T13
+            risk *= 1.3
+
+    # PAPP-A risk modifier
+    if papp_a_mom is not None:
+        if papp_a_mom < 0.4:
+            # Very low PAPP-A indicates high risk
+            risk *= 2.0
+        elif papp_a_mom < 0.5:
+            risk *= 1.5
+        elif papp_a_mom < 0.75:
+            risk *= 1.2
+
+    # Combined modifier for opposing patterns (high b-hcg + low papp_a)
+    if b_hcg_mom and papp_a_mom:
+        if b_hcg_mom > 1.5 and papp_a_mom < 0.6:
+            # Classic Down syndrome pattern
+            risk *= 1.8
+
+    return risk
+
+def apply_priors(
+    weighted_score: float,
+    disease: str,
+    context: PatientContext | PatientContextMoM,
+) -> float:
+    """
+    Apply all priors to get final disease probability modifier.
+
+    For chromosomal diseases (Down, Edwards, Patau):
+    - Maternal age is significant factor
+    - b-hCG and PAPP-A MoM values indicate disease-specific patterns
+    """
     multiplier = 1.0
-    # ... implementation
+
+    # Maternal age risk (significant for all chromosomal diseases)
+    age_risk = calculate_age_risk(context.mother_age)
+    if disease in ("down_syndrome", "edwards_syndrome", "patau_syndrome"):
+        multiplier *= age_risk
+
+    # Biomarker risk
+    if isinstance(context, PatientContextMoM):
+        biomarker_risk = calculate_biomarker_risk(context.b_hcg_mom, context.papp_a_mom)
+    else:
+        # Convert to MoM first
+        mom_context = context.to_mom()
+        biomarker_risk = calculate_biomarker_risk(mom_context.b_hcg_mom, mom_context.papp_a_mom)
+
+    if disease in ("down_syndrome", "edwards_syndrome", "patau_syndrome"):
+        multiplier *= biomarker_risk
+
+    # IVF modifier (slight increase for chromosomal anomalies)
+    if context.ivf_conception and disease in ("down_syndrome", "edwards_syndrome", "patau_syndrome"):
+        multiplier *= 1.1
+
+    # Previous affected pregnancy (significant risk factor)
+    if context.previous_affected_pregnancy:
+        multiplier *= 2.5
+
     return weighted_score * multiplier
 ```
 
@@ -142,16 +287,65 @@ def apply_priors(weighted_score: float, disease: str, context: PatientContext) -
 
 ## Phase 3: Data
 
-### `backend/scripts/seed_diseases.py`
+### Seed Data Structure
 
-Populate reference data:
-- `data/diseases.json`
-- `data/trimester_weights.json`
-- `data/priors_config.json`
+```python
+# data/diseases.json
+{
+    "down_syndrome": {
+        "name": "Down Syndrome (Trisomy 21)",
+        "base_prevalence": 1.0,  # Per 1000 births
+        "trimester_profiles": {
+            "1st": {
+                "biomarker_pattern": {"b_hcg_mom": 2.0, "papp_a_mom": 0.5},
+                "nt_cutoff_mm": 3.0
+            }
+        }
+    }
+}
+
+# data/priors_config.json
+{
+    "median_b_hcg": 50000.0,
+    "median_papp_a": 1500.0,
+    "gestational_age_range": {"min": 11, "max": 14},
+    "risk_factors": {
+        "maternal_age_threshold": 35,
+        "ivf_multiplier": 1.1,
+        "previous_affected_multiplier": 2.5
+    }
+}
+```
 
 ### `backend/scripts/seed_mock_data.py`
 
-Mock positive + negative Down Syndrome cases (1st trimester only for MVP).
+Mock positive + negative Down Syndrome cases with MoM-normalized biomarkers:
+
+```python
+# Example mock case (positive Down syndrome)
+{
+    "case_id": "ds_pos_001",
+    "disease_id": "down_syndrome",
+    "trimester": "1st",
+    "label": "positive",
+    "symptom_text": "nt_3_5mm absent_nasal_bone",
+    "gestational_age_weeks": 12.0,
+    "b_hcg_mom": 2.1,      # Elevated
+    "papp_a_mom": 0.48,    # Low
+}
+
+# Example mock case (negative/healthy)
+{
+    "case_id": "norm_001",
+    "disease_id": "down_syndrome",
+    "trimester": "1st",
+    "label": "negative",
+    "symptom_text": "normal_nt_1_8mm nasal_bone_present",
+    "gestational_age_weeks": 12.0,
+    "b_hcg_mom": 1.0,      # Normal
+    "papp_a_mom": 1.0,     # Normal
+}
+```
 
 ### `backend/scripts/compute_embeddings.py`
 
@@ -419,6 +613,16 @@ CHUNK_PRESET_DETAILED = {"size": 500, "overlap": 50}
 | 1 | MedGemma extracting symptoms from a sample image |
 | 2 | ChromaDB seeded with mock Down Syndrome cases |
 | 3 | Aggregation + scoring producing a ranked result |
-| 4 | Priors for maternal age |
+| 4 | Biomarker priors (b-hCG, PAPP-A, maternal age) |
 
 One disease (Down Syndrome), one trimester (1st), end-to-end, running offline via Docker.
+
+### Biomarker Reference (from `docs/calcul probabilité.pdf`)
+
+| Marker | Full Name | Normal Range (MoM) | Down Syndrome Pattern |
+|--------|-----------|-------------------|---------------------|
+| **b-hCG** | Beta human chorionic gonadotropin | ~1.0 MoM | Elevated (~2.0 MoM) |
+| **PAPP-A** | Pregnancy-associated plasma protein A | ~1.0 MoM | Low (~0.5 MoM) |
+| **NT** | Nuchal translucency | <3.0mm | Elevated (>3.0mm) |
+
+MoM (Multiple of Median) normalizes values for gestational age.
