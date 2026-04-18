@@ -6,7 +6,7 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - ./backend/dev.db:/app/dev.db
+      - ./backend/prisma/dev.db:/app/prisma/dev.db
     env_file:
       - .env
     environment:
