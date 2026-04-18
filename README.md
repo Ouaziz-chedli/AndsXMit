@@ -60,59 +60,136 @@ The goal is **NOT to replace doctors** — it is to **empower them with better i
 
 ## Core Architecture
 
-### Multi-Model Per Symptom Architecture
+### MedGemma + RAG: No-Training AI Architecture
 
-Instead of a single monolithic AI model trying to detect all diseases, we use a **specialized model per symptom**.
+Instead of training custom models (too slow for hackaton), we leverage **MedGemma** (Google's medical vision-language model) combined with a **Retrieval-Augmented Generation (RAG)** system. This approach requires **no model training** while enabling continuous improvement through community data.
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        INPUT LAYER                              │
-│   Ultrasound Images (1st, 2nd, or 3rd trimester)               │
-│   + Patient Context Parameters                                  │
-└─────────────────────────────────────────────────────────────────┘
-                                │
-                                ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    STANDARDIZATION LAYER                        │
-│   Medical Equipment Compatibility Layer                        │
-│   (Format normalization, DICOM handling, image enhancement)    │
-└─────────────────────────────────────────────────────────────────┘
-                                │
-                                ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    SYMPTOM DETECTION LAYER                     │
-│   ┌─────────────┐  ┌─────────────┐  ┌─────────────┐           │
-│   │  Model S1   │  │  Model S2   │  │  Model Sn   │           │
-│   │ (e.g., NT   │  │ (e.g., Heart│  │ (symptom    │
-│   │  measure)   │  │  rhythm)    │  │  detection) │
-│   └─────────────┘  └─────────────┘  └─────────────┘           │
-└─────────────────────────────────────────────────────────────────┘
-                                │
-                                ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                   DISEASE AGGREGATION LAYER                     │
-│   Diseases are constructed from weighted symptom combinations    │
-│   Trimester-specific weights applied                            │
-│   Patient context parameters integrated                         │
-└─────────────────────────────────────────────────────────────────┘
-                                │
-                                ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                   DIAGNOSIS OUTPUT LAYER                        │
-│   ┌──────────────────┐    ┌──────────────────┐                 │
-│   │  FAST TRACK       │    │  COMPREHENSIVE   │                 │
-│   │  (Probable Dx)    │    │  SCAN            │                 │
-│   │  Immediate result │    │  (Background)    │                 │
-│   └──────────────────┘    └──────────────────┘                 │
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                           INPUT LAYER                                │
+│   Ultrasound Image(s) + Patient Context (age, history, etc.)         │
+└─────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    SYMPTOM EXTRACTION (MedGemma)                     │
+│   Prompt: "Describe all observable symptoms in this ultrasound"    │
+│   Output: Structured textual symptom description                     │
+└─────────────────────────────────────────────────────────────────────┘
+                                    │
+                    ┌───────────────┼───────────────┐
+                    ▼               ▼               ▼
+           ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
+           │  Disease A  │  │  Disease B  │  │  Disease N  │
+           │  Vector DB  │  │  Vector DB  │  │  Vector DB  │
+           │  ─────────  │  │  ─────────  │  │  ─────────  │
+           │  • Images   │  │  • Images   │  │  • Images   │
+           │  • Text Sx  │  │  • Text Sx  │  │  • Text Sx  │
+           │  • Metadata │  │  • Metadata │  │  • Metadata │
+           └─────────────┘  └─────────────┘  └─────────────┘
+                    │               │               │
+                    └───────────────┼───────────────┘
+                                    ▼
+                    ┌───────────────────────────────┐
+                    │      PARALLEL VECTOR SEARCH     │
+                    │   Query ALL disease databases   │
+                    │   Retrieve top-K similar       │
+                    │   symptom patterns per disease  │
+                    └───────────────────────────────┘
+                                    │
+                                    ▼
+                    ┌───────────────────────────────┐
+                    │      AGGREGATION LAYER          │
+                    │   • Trimester-specific weights │
+                    │   • Patient context priors     │
+                    │   • Symptom overlap handling   │
+                    │   • Ponderated mean scoring    │
+                    └───────────────────────────────┘
+                                    │
+                                    ▼
+                    ┌───────────────────────────────┐
+                    │       DIAGNOSIS OUTPUT         │
+                    │   ┌──────────┐ ┌──────────┐   │
+                    │   │  FAST    │ │COMPREH.  │   │
+                    │   │  TRACK   │ │  SCAN    │   │
+                    │   │ (immediate)│(background)│   │
+                    │   └──────────┘ └──────────┘   │
+                    └───────────────────────────────┘
 ```
 
-### Why Multi-Model Per Symptom?
+### Why MedGemma + RAG?
 
-- **Higher accuracy**: Each model is specialized for one symptom pattern.
-- **Disease overlap handling**: Many diseases share similar symptoms. By detecting symptoms independently, we can recombine them more flexibly.
-- **Explainability**: Doctors can see which specific symptoms triggered which disease probability.
-- **Maintainability**: Individual models can be updated without retraining the entire system.
+| Aspect | Benefit |
+|--------|---------|
+| **No training required** | MedGemma is already trained on medical images |
+| **Community = your moat** | Doctor uploads → stored in disease vector DB → improves future diagnoses |
+| **Explainable** | Shows which similar cases influenced the diagnosis |
+| **Privacy-friendly** | Can run MedGemma locally |
+| **Two-stage preserved** | Fast: top-K retrieval | Comprehensive: full database scan |
+
+### Disease-Specific Vector Databases
+
+Each disease has its **own vector database** containing:
+
+```
+Per Disease Database Entry:
+├── Ultrasound Image(s)
+│   └── Embedded via medical image encoder
+├── Textual Symptom Description
+│   └── Generated by MedGemma from the image
+│   └── Embed via text encoder
+└── Metadata
+    ├── Trimester (1st, 2nd, 3rd)
+    ├── Patient context (anonymized)
+    ├── Diagnosis confidence
+    └── Doctor/institution source
+```
+
+### Why Per-Disease Databases?
+
+- **Isolation**: Disease-specific similarity search is more precise
+- **Scalability**: New diseases = new database, no retraining
+- **Relevance**: Query only relevant diseases (e.g., don't search cardiac if looking at brain)
+- **Maintainability**: Update one disease's database without affecting others
+
+### RAG Retrieval Flow
+
+```
+1. Doctor uploads ultrasound + context (trimester, parental params)
+
+2. MedGemma generates symptom description:
+   "Fetus shows increased nuchal translucency (3.2mm), absent nasal bone,
+    cardiac anomaly consistent with AV canal defect..."
+
+3. Query all disease vector DBs in parallel:
+   - Embed input image + text
+   - Retrieve top-K most similar symptom patterns per disease
+
+4. Aggregation:
+   - Combine similarity scores with trimester weights
+   - Apply patient context as Bayesian priors
+   - Calculate pondrated mean per disease
+
+5. Return diagnosis:
+   - Fast track: Top 3-5 probable diseases (immediate)
+   - Comprehensive: Full disease list (background, async)
+```
+
+### No Training = Fast Hackaton Development
+
+Traditional ML approach would require:
+- Collecting thousands of labeled ultrasound images
+- Training CNN/ViT models for each symptom
+- Weeks/months of GPU time
+- Medical expertise for labeling
+
+**Our approach requires:**
+- MedGemma integration
+- Vector database setup
+- RAG retrieval + aggregation logic
+- Sample data for demonstration
+
+This makes the hackaton timeline achievable while maintaining a path to production quality through community data accumulation.
 
 ---
 
@@ -290,18 +367,34 @@ PrenatalAI aims to **reduce unnecessary invasive procedures** by providing bette
 - No API maintenance burden
 - Accessible to resource-limited settings
 
+### No-Training AI with MedGemma
+
+**Traditional ML approach problems**:
+- Requires thousands of labeled medical images
+- Training takes weeks/months with GPU resources
+- Needs medical experts for labeling
+- Model updates require full retraining
+
+**Our approach with MedGemma + RAG**:
+- MedGemma already trained on medical imaging (no training needed)
+- Community cases serve as "training data" in vector databases
+- New cases improve retrieval quality instantly
+- No GPU cluster required for development
+
 ### Privacy-First Architecture
 
-- All processing can happen on-premise (no cloud dependency)
+- MedGemma can run locally (no cloud dependency)
 - Patient data never leaves the doctor's control without explicit consent
 - Community uploads are anonymized before sharing
 - GDPR-compliant data handling
+- Vector databases can be hosted on-premise
 
 ### Explainable AI
 
-- Every diagnosis includes the symptom-level reasoning
-- Doctors see which markers contributed to which probability
-- Confidence intervals provided, not just binary outputs
+- Every diagnosis shows which similar community cases were retrieved
+- MedGemma generates textual symptom descriptions (readable reasoning)
+- Similarity scores visible per retrieved case
+- Trimester weights and patient context factors disclosed
 - Audit trails for medical liability
 
 ---
@@ -310,11 +403,12 @@ PrenatalAI aims to **reduce unnecessary invasive procedures** by providing bette
 
 ### For This Hackathon
 
-- [ ] Demonstrate end-to-end prototype with sample ultrasound images
-- [ ] Show multi-model architecture with at least 2 symptom detectors
-- [ ] Implement trimester-aware weighting system
+- [ ] Integrate MedGemma for symptom extraction from ultrasound images
+- [ ] Set up per-disease vector databases (ChromaDB/Qdrant)
+- [ ] Implement RAG retrieval with multi-modal search (images + text)
+- [ ] Build trimester-aware aggregation layer with patient context
+- [ ] Demonstrate two-stage inference (fast + comprehensive)
 - [ ] Create mock community upload flow
-- [ ] Present two-stage inference (fast + comprehensive)
 
 ### Long-Term Vision
 
@@ -340,11 +434,24 @@ This document represents the initial vision and design decisions. The project is
 This project is in early development. If you're interested in contributing:
 
 - Medical professionals: Share your expertise on disease presentations and ultrasound markers
-- ML/AI engineers: Help build the multi-model symptom detection system
+- ML/AI engineers: Help build MedGemma integration and vector search
 - Developers: Build the platform, APIs, and community features
 - Healthcare UX designers: Help design the doctor interface
 
 ---
 
+## Technology Stack
+
+| Component | Technology | Role |
+|-----------|------------|------|
+| **Vision-Language AI** | MedGemma (Google DeepMind) | Symptom extraction from ultrasounds |
+| **Vector Database** | Qdrant / ChromaDB | Per-disease symptom storage |
+| **Embedding Models** | MedGemma encoder / BiomedCLIP | Multi-modal vectorization |
+| **Backend** | Python (FastAPI) | API layer |
+| **Frontend** | React / Next.js | Doctor interface |
+| **Storage** | PostgreSQL + S3 | Metadata + image storage |
+
+---
+
 *Last updated: 2026-04-18*
-# AndsXMit
+*Project: AndsXMit Hackaton*
