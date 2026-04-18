@@ -52,6 +52,8 @@ class PatientContext(BaseModel):
     previous_pregnancies: list[PregnancyOutcome] = []
     ethnicity: str | None = None
     ivf_conception: bool = False
+    vt
+
 
 class DiagnosisResult(BaseModel):
     disease_id: str
