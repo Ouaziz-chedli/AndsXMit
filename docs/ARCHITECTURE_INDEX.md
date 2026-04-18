@@ -20,13 +20,29 @@ prenatal-ai/
 │   ├── Dev1-Plan-Implementation.md # Dev1 implementation plan (French)
 │   │
 │   ├── STRATEGIE.md             # European strategy (EHDS, RGPD, open source)
-│   │
-│   └── Dev1-Plan-Implementation.md
+│   └── RepatitionBackend.md      # Dev coordination
 │
-└── backend/
-    ├── README.md                # Backend usage, API docs, Docker
-    ├── pipeline-detection.md    # 7-step diagnosis pipeline
-    └── pipeline-doctor.md       # Doctor case upload workflow
+├── backend/                     # Python/FastAPI — AI pipeline
+│   ├── app/                    # FastAPI application
+│   ├── tests/                  # Python tests (155 passing)
+│   ├── scripts/                # Seed scripts
+│   ├── Dockerfile
+│   ├── docker-compose.yml
+│   ├── requirements.txt
+│   ├── pipeline-detection.md    # 7-step diagnosis pipeline
+│   └── pipeline-doctor.md       # Doctor case upload workflow
+│
+├── api/                        # Node.js/Express — REST API
+│   ├── src/                   # Express routes, controllers, middleware
+│   ├── prisma/                # Prisma ORM (auth, users)
+│   ├── package.json
+│   ├── Dockerfile
+│   └── check_db.js            # DB diagnostic script
+│
+└── frontend/                   # React/Vite — UI
+    ├── src/
+    ├── package.json
+    └── Dockerfile
 ```
 
 ---

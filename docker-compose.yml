@@ -1,12 +1,12 @@
 services:
-  backend:
+  api:
     build:
-      context: ./backend
+      context: ./api
       dockerfile: Dockerfile
     ports:
       - "3000:3000"
     volumes:
-      - ./backend/prisma/dev.db:/app/prisma/dev.db
+      - ./api/prisma/dev.db:/app/prisma/dev.db
     env_file:
       - .env
     environment:
@@ -26,4 +26,4 @@ services:
       - ./frontend/src:/app/src
     restart: unless-stopped
     depends_on:
-      - backend
+      - api
