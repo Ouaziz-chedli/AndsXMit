@@ -1,0 +1,29 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  role      String   @default("personal") // "personal" or "enterprise"
+
+  // Personal fields (required if role == "personal")
+  firstName String?
+  lastName  String?
+  phone     String?
+
+  // Enterprise fields (required if role == "enterprise")
+  managerFirstName String?
+  managerLastName  String?
+  companyName      String?
+  companyType      String?  // "private" or "public"
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
