@@ -20,6 +20,12 @@ from .medgemma import (
     extract_symptoms_from_bytes,
 )
 
+from .ollama_client import (
+    OllamaClient,
+    get_ollama_client,
+    reset_ollama_client,
+)
+
 from .vector_store import (
     VectorStore,
     RetrievedCase,

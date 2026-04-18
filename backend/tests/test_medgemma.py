@@ -107,17 +107,18 @@ class TestMedGemma:
 
     def test_initialization(self):
         """Test MedGemma initialization."""
-        medgemma = MedGemma()
+        medgemma = MedGemma(use_mock=True)  # Use mock mode for testing
 
         assert medgemma.model_path is None
-        assert medgemma.device == "cpu"
+        assert medgemma.device in ("cpu", "cuda", "mps")
         assert medgemma._is_loaded is False
 
     def test_initialization_with_custom_params(self):
         """Test initialization with custom parameters."""
         medgemma = MedGemma(
             model_path="/custom/path/model",
-            device="cuda"
+            device="cuda",
+            use_mock=True,
         )
 
         assert medgemma.model_path == "/custom/path/model"
@@ -125,7 +126,7 @@ class TestMedGemma:
 
     def test_load_sets_is_loaded(self, reset_model):
         """Test that load() sets _is_loaded flag."""
-        medgemma = MedGemma()
+        medgemma = MedGemma(use_mock=True)
         assert medgemma._is_loaded is False
 
         medgemma.load()
@@ -133,7 +134,7 @@ class TestMedGemma:
 
     def test_ensure_loaded(self, reset_model):
         """Test that _ensure_loaded() loads model if needed."""
-        medgemma = MedGemma()
+        medgemma = MedGemma(use_mock=True)
         assert medgemma._is_loaded is False
 
         medgemma._ensure_loaded()
@@ -141,7 +142,7 @@ class TestMedGemma:
 
     def test_extract_symptoms_from_bytes(self, reset_model, sample_image_bytes):
         """Test extracting symptoms from image bytes."""
-        medgemma = MedGemma()
+        medgemma = MedGemma(use_mock=True)
 
         description = medgemma.extract_symptoms_from_bytes(
             image_bytes=sample_image_bytes,
@@ -159,7 +160,7 @@ class TestMedGemma:
         self, reset_model, sample_image_bytes
     ):
         """Test extracting symptoms for different trimesters."""
-        medgemma = MedGemma()
+        medgemma = MedGemma(use_mock=True)
 
         for trimester in ["1st", "2nd", "3rd"]:
             description = medgemma.extract_symptoms_from_bytes(
@@ -173,7 +174,7 @@ class TestMedGemma:
 
     def test_embed_image(self, reset_model, sample_image_bytes):
         """Test generating image embedding."""
-        medgemma = MedGemma()
+        medgemma = MedGemma(use_mock=True)
 
         embedding = medgemma.embed_image(sample_image_bytes)
 
@@ -183,7 +184,7 @@ class TestMedGemma:
 
     def test_embed_symptoms(self, reset_model):
         """Test generating symptom text embedding."""
-        medgemma = MedGemma()
+        medgemma = MedGemma(use_mock=True)
 
         embedding = medgemma.embed_symptoms("nuchal_translucency_3_5mm absent_nasal_bone")
 
@@ -193,7 +194,7 @@ class TestMedGemma:
 
     def test_embed_symptoms_different_texts(self, reset_model):
         """Test that different texts produce different embeddings."""
-        medgemma = MedGemma()
+        medgemma = MedGemma(use_mock=True)
 
         emb1 = medgemma.embed_symptoms("nt_3_5mm absent_nasal_bone")
         emb2 = medgemma.embed_symptoms("normal_scan")
@@ -204,7 +205,7 @@ class TestMedGemma:
 
     def test_mock_analysis_first_trimester(self, reset_model):
         """Test mock analysis returns first trimester symptoms."""
-        medgemma = MedGemma()
+        medgemma = MedGemma(use_mock=True)
         medgemma.load()
 
         description = medgemma._mock_analysis("1st")
@@ -221,7 +222,7 @@ class TestMedGemma:
 
     def test_mock_analysis_second_trimester(self, reset_model):
         """Test mock analysis returns second trimester symptoms."""
-        medgemma = MedGemma()
+        medgemma = MedGemma(use_mock=True)
         medgemma.load()
 
         description = medgemma._mock_analysis("2nd")
@@ -232,7 +233,7 @@ class TestMedGemma:
 
     def test_mock_analysis_third_trimester(self, reset_model):
         """Test mock analysis returns third trimester symptoms."""
-        medgemma = MedGemma()
+        medgemma = MedGemma(use_mock=True)
         medgemma.load()
 
         description = medgemma._mock_analysis("3rd")

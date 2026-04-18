@@ -1,0 +1,188 @@
+"""
+Ollama Client - Interface to Ollama for MedGemma inference.
+
+Ollama runs MedGemma locally via REST API, enabling self-hosted AI inference.
+"""
+
+import httpx
+from typing import Optional
+
+
+class OllamaClient:
+    """Simple Ollama API client for MedGemma inference."""
+
+    def __init__(
+        self,
+        base_url: str = "http://localhost:11434",
+        model: str = "medgemma",
+        timeout: float = 120.0,
+    ):
+        """
+        Initialize Ollama client.
+
+        Args:
+            base_url: Ollama server URL
+            model: Model name to use
+            timeout: Request timeout in seconds
+        """
+        self.base_url = base_url.rstrip("/")
+        self.model = model
+        self.client = httpx.AsyncClient(timeout=timeout)
+
+    async def analyze_image(
+        self,
+        image_path: str,
+        prompt: str,
+        system: str | None = None,
+    ) -> str:
+        """
+        Send image to Ollama for analysis.
+        Works with medgemma model that supports vision.
+
+        Args:
+            image_path: Path to the image file
+            prompt: Prompt/question for the model
+            system: Optional system prompt
+
+        Returns:
+            Model's text response
+        """
+        with open(image_path, "rb") as f:
+            image_bytes = f.read()
+
+        json_body = {
+            "model": self.model,
+            "prompt": prompt,
+            "images": [image_bytes.hex()],
+            "stream": False,
+        }
+
+        if system:
+            json_body["system"] = system
+
+        response = await self.client.post(
+            f"{self.base_url}/api/generate",
+            json=json_body,
+        )
+        response.raise_for_status()
+        return response.json()["response"]
+
+    async def analyze_image_bytes(
+        self,
+        image_bytes: bytes,
+        prompt: str,
+        system: str | None = None,
+    ) -> str:
+        """
+        Send image bytes to Ollama for analysis.
+
+        Args:
+            image_bytes: Image data as bytes
+            prompt: Prompt/question for the model
+            system: Optional system prompt
+
+        Returns:
+            Model's text response
+        """
+        json_body = {
+            "model": self.model,
+            "prompt": prompt,
+            "images": [image_bytes.hex()],
+            "stream": False,
+        }
+
+        if system:
+            json_body["system"] = system
+
+        response = await self.client.post(
+            f"{self.base_url}/api/generate",
+            json=json_body,
+        )
+        response.raise_for_status()
+        return response.json()["response"]
+
+    async def generate_embeddings(self, text: str) -> list[float]:
+        """
+        Generate text embeddings using Ollama's embedding endpoint.
+
+        Args:
+            text: Text to embed
+
+        Returns:
+            Embedding vector
+        """
+        response = await self.client.post(
+            f"{self.base_url}/api/embeddings",
+            json={
+                "model": self.model,
+                "prompt": text,
+            },
+        )
+        response.raise_for_status()
+        return response.json()["embedding"]
+
+    async def close(self) -> None:
+        """Close the HTTP client."""
+        await self.client.aclose()
+
+    async def is_available(self) -> bool:
+        """
+        Check if Ollama server is available.
+
+        Returns:
+            True if server responds successfully
+        """
+        try:
+            response = await self.client.get(f"{self.base_url}/api/tags")
+            return response.status_code == 200
+        except Exception:
+            return False
+
+    async def list_models(self) -> list[dict]:
+        """
+        List available models on the Ollama server.
+
+        Returns:
+            List of model info dicts
+        """
+        response = await self.client.get(f"{self.base_url}/api/tags")
+        response.raise_for_status()
+        return response.json().get("models", [])
+
+
+# Global client instance
+_ollama_client: Optional[OllamaClient] = None
+
+
+def get_ollama_client(
+    base_url: str | None = None,
+    model: str | None = None,
+) -> OllamaClient:
+    """
+    Get or create the global Ollama client instance.
+
+    Args:
+        base_url: Ollama server URL (uses env OLLAMA_HOST if not provided)
+        model: Model name (uses env OLLAMA_MODEL if not provided)
+
+    Returns:
+        OllamaClient instance
+    """
+    global _ollama_client
+    if _ollama_client is None:
+        from app.config import settings
+
+        _ollama_client = OllamaClient(
+            base_url=base_url or settings.OLLAMA_HOST,
+            model=model or settings.OLLAMA_MODEL,
+        )
+    return _ollama_client
+
+
+def reset_ollama_client() -> None:
+    """Reset the global Ollama client instance."""
+    global _ollama_client
+    if _ollama_client is not None:
+        import asyncio
+        asyncio.create_task(_ollama_client.close())
+    _ollama_client = None
