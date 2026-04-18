@@ -119,7 +119,6 @@ Instead of training custom models (too slow for hackaton), we leverage **MedGemm
                     │   └──────────┘ └──────────┘   │
                     └───────────────────────────────┘
 ```
-
 ### Why MedGemma + RAG?
 
 | Aspect | Benefit |
