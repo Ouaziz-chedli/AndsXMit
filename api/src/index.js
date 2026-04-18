@@ -85,7 +85,35 @@ app.use(
   createProxyMiddleware({
     target: BACKEND_URL,
     changeOrigin: true,
-    pathRewrite: (path) => `/api/rag${path}`,
+    pathRewrite: (path) => {
+      // /api/rag/upload-context -> /api/v1/documents/upload
+      if (path === '/api/rag/upload-context') {
+        return '/api/v1/documents/upload';
+      }
+      // /api/rag/search -> /api/v1/documents/search
+      if (path.startsWith('/api/rag/search')) {
+        return path.replace('/api/rag/search', '/api/v1/documents/search');
+      }
+      // Default: passthrough
+      return path;
+    },
+    onProxyReq: (proxyReq, req) => {
+      if (process.env.DEBUG === 'true') {
+        console.log(`[PROXY] ${req.method} ${req.originalUrl} -> ${BACKEND_URL}${proxyReq.path}`);
+      }
+      if (req.requestId) {
+        proxyReq.setHeader('X-Request-ID', req.requestId);
+      }
+    },
+    onProxyRes: (proxyRes, req) => {
+      if (process.env.DEBUG === 'true') {
+        console.log(`[PROXY] Response ${proxyRes.statusCode} for ${req.method} ${req.originalUrl}`);
+      }
+    },
+    onError: (err, req, res) => {
+      console.error(`[PROXY] Error: ${err.message}`);
+      res.status(502).json({ error: 'Proxy error', detail: err.message });
+    },
   })
 );
 

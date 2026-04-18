@@ -8,6 +8,7 @@ import Chat from './pages/Chat';
 import Account from './pages/Account';
 import MDS from './pages/MDS';
 import Login from './pages/Login';
+import Diagnosis from './pages/Diagnosis';
 
 function App() {
   const [theme, setTheme] = useState('dark');
@@ -37,6 +38,7 @@ function App() {
             <Route path="/account" element={<Account />} />
             <Route path="/mds" element={<MDS />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/diagnosis" element={<Diagnosis />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>

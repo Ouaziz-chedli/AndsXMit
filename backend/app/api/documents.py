@@ -7,29 +7,33 @@ from app.core.document_processor import get_document_processor
 
 router = APIRouter(prefix="/api/v1/documents", tags=["documents"])
 
-ALLOWED_CONTENT_TYPE = "application/pdf"
+ALLOWED_CONTENT_TYPES = {
+    "application/pdf": ".pdf",
+    "text/plain": ".txt",
+    "text/markdown": ".md",
+}
 
 
 @router.post("/upload", response_model=UploadResponse)
 async def upload_document(file: UploadFile = File(...)):
-    """Upload a PDF document for vector indexing.
+    """Upload a document for vector indexing.
 
-    Accepts PDF files, extracts text, chunks it, and stores
+    Accepts PDF, TXT, and MD files, extracts text, chunks it, and stores
     embeddings in ChromaDB for similarity search.
 
     Args:
-        file: PDF file upload
+        file: Document file upload
 
     Returns:
         UploadResponse with document_id and chunk count
 
     Raises:
-        HTTPException: 422 if file is not a PDF
+        HTTPException: 422 if file type is not supported
     """
-    if file.content_type != ALLOWED_CONTENT_TYPE:
+    if file.content_type not in ALLOWED_CONTENT_TYPES:
         raise HTTPException(
             status_code=422,
-            detail="File must be a PDF",
+            detail=f"File type not supported. Allowed: {', '.join(ALLOWED_CONTENT_TYPES.keys())}",
         )
 
     try:
@@ -44,8 +48,9 @@ async def upload_document(file: UploadFile = File(...)):
 
         processor = get_document_processor()
         document_id, chunk_count = processor.process_and_index(
-            pdf_bytes=contents,
+            content_bytes=contents,
             filename=file.filename or "unknown.pdf",
+            content_type=file.content_type,
         )
 
         return UploadResponse(

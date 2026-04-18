@@ -9,7 +9,7 @@ class DocumentMetadata(BaseModel):
     """Metadata for an uploaded document."""
     filename: str
     file_size: int
-    content_type: str = "application/pdf"
+    content_type: str = "application/pdf"  # Could also be text/plain or text/markdown
     chunk_count: int = 0
     indexed_at: datetime = Field(default_factory=datetime.utcnow)
 

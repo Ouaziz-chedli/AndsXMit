@@ -124,21 +124,31 @@ class DocumentProcessor:
 
     def process_and_index(
         self,
-        pdf_bytes: bytes,
+        content_bytes: bytes,
         filename: str,
+        content_type: str = "application/pdf",
         collection_name: str = MEDICAL_DOCS_COLLECTION,
     ) -> Tuple[str, int]:
-        """Process a PDF and index its chunks into ChromaDB.
+        """Process a document and index its chunks into ChromaDB.
 
         Args:
-            pdf_bytes: PDF content as bytes
+            content_bytes: Document content as bytes
             filename: Original filename for metadata
+            content_type: MIME type of the document
             collection_name: ChromaDB collection name
 
         Returns:
             Tuple of (document_id, chunk_count)
         """
-        text = self.extract_text_from_bytes(pdf_bytes)
+        # Extract text based on content type
+        if content_type == "application/pdf":
+            text = self.extract_text_from_bytes(content_bytes)
+        elif content_type == "text/plain":
+            text = content_bytes.decode("utf-8", errors="replace")
+        elif content_type == "text/markdown":
+            text = content_bytes.decode("utf-8", errors="replace")
+        else:
+            raise ValueError(f"Unsupported content type: {content_type}")
 
         if not text.strip():
             doc_id = str(uuid.uuid4())

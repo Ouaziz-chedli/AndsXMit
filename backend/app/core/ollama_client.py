@@ -161,6 +161,55 @@ class OllamaClient:
         except Exception:
             return False
 
+    async def chat(
+        self,
+        message: str,
+        system: str | None = None,
+        temperature: float = 0.1,
+    ) -> str:
+        """
+        Send a text-only chat message to Ollama.
+
+        Uses the /api/chat endpoint for conversational interaction.
+
+        Args:
+            message: User message
+            system: Optional system prompt
+            temperature: Sampling temperature
+
+        Returns:
+            Model's text response
+        """
+        json_body = {
+            "model": self.model,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": message,
+                }
+            ],
+            "stream": False,
+            "options": {
+                "temperature": temperature,
+            },
+        }
+
+        if system:
+            json_body["messages"].insert(
+                0,
+                {
+                    "role": "system",
+                    "content": system,
+                }
+            )
+
+        response = await self.client.post(
+            f"{self.base_url}/api/chat",
+            json=json_body,
+        )
+        response.raise_for_status()
+        return response.json()["message"]["content"]
+
     async def list_models(self) -> list[dict]:
         """
         List available models on the Ollama server.

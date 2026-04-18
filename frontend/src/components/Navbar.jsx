@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Activity, MessageSquare, Shield, User, LayoutDashboard, LogIn, LogOut, Sun, Moon } from 'lucide-react';
+import { Activity, MessageSquare, Shield, User, LayoutDashboard, LogIn, LogOut, Sun, Moon, Stethoscope } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const Navbar = ({ theme, toggleTheme }) => {
@@ -12,7 +12,7 @@ const Navbar = ({ theme, toggleTheme }) => {
     { name: 'Strategy', path: '/strategy', icon: Shield },
     { name: 'MDS', path: '/mds', icon: LayoutDashboard },
     { name: 'Chat LLM', path: '/chat', icon: MessageSquare },
-    ...(isAuthenticated ? [{ name: 'Account', path: '/account', icon: User }] : []),
+    ...(isAuthenticated ? [{ name: 'Diagnosis', path: '/diagnosis', icon: Stethoscope }, { name: 'Account', path: '/account', icon: User }] : []),
   ];
 
   const handleLogout = () => {
