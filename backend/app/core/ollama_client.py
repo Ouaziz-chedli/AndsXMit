@@ -228,7 +228,39 @@ class OllamaClient:
         if debug:
             logger.info(f"[OLLAMA] Response content length: {len(content)} chars")
 
+        # Post-process: strip tool_code blocks that MedGemma may generate
+        content = self._clean_tool_code(content)
+
         return content
+
+    def _clean_tool_code(self, text: str) -> str:
+        """Remove tool_code blocks from model output.
+
+        MedGemma sometimes generates tool_code blocks in its response,
+        which are not intended for user display. This strips them.
+
+        Args:
+            text: Raw model output
+
+        Returns:
+            Cleaned text without tool_code blocks
+        """
+        import re
+
+        # Remove all code blocks that contain tool_code (including nested print statements)
+        # Matches ```...tool_code...``` across multiple lines
+        cleaned = re.sub(r'```[^`]*tool_code[^`]*```', '', text, flags=re.DOTALL)
+
+        # Remove any remaining triple backtick code blocks
+        cleaned = re.sub(r'```[^`]+```', '', cleaned)
+
+        # Remove standalone print statements
+        cleaned = re.sub(r'print\s*\([^)]+\)', '', cleaned)
+
+        # Clean up extra whitespace and newlines
+        cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
+
+        return cleaned.strip()
 
     async def list_models(self) -> list[dict]:
         """

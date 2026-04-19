@@ -95,9 +95,7 @@ app.post('/api/llm/chat', async (req, res) => {
       'Content-Length': Buffer.byteLength(data),
       'X-Request-ID': requestId,
       'X-Forwarded-For': req.ip,
-      'Connection': 'close',
     },
-    agent: false,  // Disable connection pooling to avoid socket issues
   };
 
   console.log(`[LLM-DIRECT] Forwarding to ${BACKEND_URL}/api/llm/chat, body size: ${Buffer.byteLength(data)} bytes`);
