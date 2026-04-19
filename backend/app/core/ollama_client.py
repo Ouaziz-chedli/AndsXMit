@@ -180,6 +180,12 @@ class OllamaClient:
         Returns:
             Model's text response
         """
+        import logging
+        import os
+
+        logger = logging.getLogger(__name__)
+        debug = os.getenv("DEBUG", "false").lower() == "true"
+
         json_body = {
             "model": self.model,
             "messages": [
@@ -203,12 +209,26 @@ class OllamaClient:
                 }
             )
 
+        if debug:
+            logger.info(f"[OLLAMA] Sending chat request to {self.base_url}/api/chat")
+            logger.info(f"[OLLAMA] Model: {self.model}, Messages: {len(json_body['messages'])}")
+
         response = await self.client.post(
             f"{self.base_url}/api/chat",
             json=json_body,
         )
+
+        if debug:
+            logger.info(f"[OLLAMA] Response status: {response.status_code}")
+
         response.raise_for_status()
-        return response.json()["message"]["content"]
+        result = response.json()
+        content = result["message"]["content"]
+
+        if debug:
+            logger.info(f"[OLLAMA] Response content length: {len(content)} chars")
+
+        return content
 
     async def list_models(self) -> list[dict]:
         """

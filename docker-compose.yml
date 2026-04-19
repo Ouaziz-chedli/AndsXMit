@@ -13,6 +13,7 @@ services:
       - DATABASE_URL=file:./dev.db
       - JWT_SECRET=${JWT_SECRET}
       - BACKEND_URL=http://backend:8000
+      - DEBUG=true
     restart: unless-stopped
     depends_on:
       - backend
@@ -25,6 +26,8 @@ services:
       - "5173:5173"
     env_file:
       - .env
+    environment:
+      - VITE_DEBUG=true
     volumes:
       - ./frontend/src:/app/src
     restart: unless-stopped
@@ -32,7 +35,7 @@ services:
       - api
 
   backend:
-    build: 
+    build:
       context: ./backend
       dockerfile: Dockerfile
     ports:
@@ -46,4 +49,5 @@ services:
       - IMAGE_DIR=/data/images
       - OLLAMA_HOST=http://host.docker.internal:11434
       - OLLAMA_MODEL=medgemma
+      - DEBUG=true
     restart: unless-stopped

@@ -1,36 +1,72 @@
 import { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { buildApiUrl } from '../lib/api';
+import { apiClient } from '../lib/apiClient';
+import logger from '../lib/logger';
+
+const NAMESPACE = 'Chat';
 
 const Chat = () => {
   const [messages, setMessages] = useState([{ role: 'assistant', content: 'Hello. I am MedGemma, specialized in prenatal ultrasound analysis. How can I help you?' }]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [backendOnline, setBackendOnline] = useState(false);
+  const [checkingStatus, setCheckingStatus] = useState(true);
   const endOfMessagesRef = useRef(null);
 
   useEffect(() => {
     endOfMessagesRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Check backend health on mount
+  useEffect(() => {
+    const checkBackendHealth = async () => {
+      try {
+        // Use apiClient for logging
+        const result = await apiClient.get('/api/health');
+        setBackendOnline(result.ok);
+        logger.debug(NAMESPACE, 'Health check', { status: result.status, ok: result.ok });
+      } catch (error) {
+        setBackendOnline(false);
+        logger.error(NAMESPACE, 'Health check failed', { error: error.message });
+      } finally {
+        setCheckingStatus(false);
+      }
+    };
+    checkBackendHealth();
+    // Check health every 30 seconds
+    const interval = setInterval(checkBackendHealth, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
   const handleSend = async () => {
     if (!input.trim()) return;
-    
+
     const userMsg = input;
     setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
     setInput('');
     setLoading(true);
 
+    logger.info(NAMESPACE, 'Sending chat request', { message: userMsg });
+
     try {
-      const res = await fetch(buildApiUrl('/api/llm/chat'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userMsg })
+      const result = await apiClient.post('/api/llm/chat', { message: userMsg });
+
+      logger.debug(NAMESPACE, 'Chat response', {
+        status: result.status,
+        ok: result.ok,
+        hasData: !!result.data,
+        responsePreview: result.data?.response?.substring(0, 100)
       });
-      const data = await res.json();
-      setMessages(prev => [...prev, { role: 'assistant', content: data.response }]);
-    } catch (e) {
-      setMessages(prev => [...prev, { role: 'assistant', content: 'Backend connection error.' }]);
+
+      if (!result.ok) {
+        setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${result.data?.detail || 'Unknown error'}` }]);
+      } else {
+        setMessages(prev => [...prev, { role: 'assistant', content: result.data.response }]);
+      }
+    } catch (error) {
+      logger.error(NAMESPACE, 'Chat request failed', { error: error.message });
+      setMessages(prev => [...prev, { role: 'assistant', content: 'Backend connection error. Is the Express API server running?' }]);
     } finally {
       setLoading(false);
     }
@@ -45,8 +81,23 @@ const Chat = () => {
           </div>
           <div>
             <h2 className="font-semibold  text-slate-900 dark:text-white ">MedGemma LLM</h2>
-            <p className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-green-500"></span> Online
+            <p className={`text-xs flex items-center gap-1 ${backendOnline ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
+              {checkingStatus ? (
+                <>
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  <span>Checking...</span>
+                </>
+              ) : backendOnline ? (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                  <span>Online</span>
+                </>
+              ) : (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                  <span>Offline</span>
+                </>
+              )}
             </p>
           </div>
         </div>
