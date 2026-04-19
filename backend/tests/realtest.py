@@ -103,9 +103,9 @@ async def run_diagnosis(
     service = DiagnosisService(vector_store_path=vector_store_path)
     print_key_value("Service", "initialized")
 
-    # Check MedGemma
+    # Check MedGemma (use public API)
     medgemma = get_medgemma()
-    medgemma._ensure_loaded()
+    medgemma.load()
     print_key_value("MedGemma", "loaded")
 
     # Run diagnosis
@@ -195,20 +195,22 @@ async def extract_and_show_symptoms(image_path: str, trimester: str, verbose: bo
 
     # Load image
     image, metadata = load_ultrasound_image(image_path)
-    print_key_value("Image Format", metadata.format or "unknown")
-    print_key_value("Image Size", f"{metadata.width}x{metadata.height}")
+    print_key_value("Image Format", Path(image_path).suffix or "unknown")
+    print_key_value("Image Size", f"{image.width}x{image.height}")
 
     if metadata.gestational_age_weeks:
         print_key_value("Gestational Age (from metadata)", f"{metadata.gestational_age_weeks} weeks")
     if metadata.trimester:
         print_key_value("Trimester (from metadata)", metadata.trimester)
+    if metadata.manufacturer:
+        print_key_value("Manufacturer", metadata.manufacturer)
 
     # Convert to bytes
     image_bytes = image_to_bytes(image, format="PNG")
 
-    # Get MedGemma
+    # Get MedGemma (use public API)
     medgemma = get_medgemma()
-    medgemma._ensure_loaded()
+    medgemma.load()
 
     print_key_value("MedGemma", "extracting symptoms...")
 

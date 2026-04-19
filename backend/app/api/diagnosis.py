@@ -61,6 +61,7 @@ async def diagnose(
 
     # Generate task ID for background tracking
     task_id = f"task-{uuid.uuid4().hex[:12]}"
+    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
 
     # Save images to /data/images/
     image_dir = Path(settings.IMAGE_DIR)
@@ -77,6 +78,13 @@ async def diagnose(
         with open(filepath, "wb") as f:
             f.write(content)
         image_paths.append(str(filepath))
+
+        # Scope 1: Save copy to /save/{timestamp}/{case_id}/image.{ext}
+        save_dir = Path(__file__).parent.parent.parent.parent / "save" / timestamp / task_id
+        save_dir.mkdir(parents=True, exist_ok=True)
+        save_image_path = save_dir / f"image{ext}"
+        with open(save_image_path, "wb") as f:
+            f.write(content)
 
     # Create background task record
     task_repo = DiagnosisTaskRepository(db)
@@ -117,6 +125,44 @@ async def diagnose(
         top_results = run_diagnosis_mock(patient_context, trimester)
 
     fast_track_ms = int((time.time() - start_time) * 1000)
+
+    # Scope 2: Save diagnosis results JSON
+    results_data = {
+        "task_id": task_id,
+        "timestamp": datetime.utcnow().isoformat(),
+        "trimester": trimester,
+        "fast_track_ms": fast_track_ms,
+        "results": [
+            {
+                "disease_id": r.disease_id,
+                "disease_name": r.disease_name,
+                "final_score": r.final_score,
+                "confidence_interval": list(r.confidence_interval) if r.confidence_interval else None,
+                "applied_priors": r.applied_priors,
+                "matching_positive_cases": r.matching_positive_cases,
+                "matching_negative_cases": r.matching_negative_cases,
+            }
+            for r in top_results
+        ],
+    }
+    save_dir = Path(__file__).parent.parent.parent.parent / "save" / timestamp / task_id
+    save_results_path = save_dir / "results.json"
+    with open(save_results_path, "w") as f:
+        json.dump(results_data, f, indent=2)
+
+    # Scope 3: Save patient context (anonymized)
+    context_data = {
+        "task_id": task_id,
+        "timestamp": datetime.utcnow().isoformat(),
+        "trimester": trimester,
+        "gestational_age_weeks": patient_context.gestational_age_weeks,
+        "mother_age": patient_context.mother_age,
+        "previous_affected_pregnancy": patient_context.previous_affected_pregnancy,
+        # Note: biomarkers omitted for privacy - can be added if needed
+    }
+    save_context_path = save_dir / "context.json"
+    with open(save_context_path, "w") as f:
+        json.dump(context_data, f, indent=2)
 
     # Queue comprehensive background task
     background_tasks.add_task(

@@ -79,26 +79,20 @@ app.use(
     pathRewrite: (path) => {
       // path is the portion after /api/llm, e.g., /chat
       const rewritten = `/api/llm${path}`;
-      if (process.env.DEBUG === 'true') {
-        console.log(`[LLM-PROXY] pathRewrite: mount=/api/llm path=${path} -> ${rewritten}`);
-      }
+      console.log(`[LLM-PROXY] pathRewrite: received path="${path}" -> rewritten="${rewritten}"`);
       return rewritten;
     },
     onProxyReq: (proxyReq, req) => {
-      if (process.env.DEBUG === 'true') {
-        console.log(`[LLM-PROXY] Forwarding: ${req.method} ${req.originalUrl} -> ${BACKEND_URL}${proxyReq.path}`);
-      }
+      console.log(`[LLM-PROXY] onProxyReq: ${req.method} ${req.originalUrl} -> ${BACKEND_URL}${proxyReq.path}`);
       if (req.requestId) {
         proxyReq.setHeader('X-Request-ID', req.requestId);
       }
     },
     onProxyRes: (proxyRes, req) => {
-      if (process.env.DEBUG === 'true') {
-        console.log(`[LLM-PROXY] Response ${proxyRes.statusCode} for ${req.method} ${req.originalUrl}`);
-      }
+      console.log(`[LLM-PROXY] onProxyRes: Response ${proxyRes.statusCode} for ${req.method} ${req.originalUrl}`);
     },
     onError: (err, req, res) => {
-      console.error(`[LLM-PROXY] Error proxying ${req.method} ${req.originalUrl}: ${err.message}`);
+      console.error(`[LLM-PROXY] onError: ${req.method} ${req.originalUrl} - ${err.message}`);
       res.status(502).json({ error: 'Proxy error', detail: err.message });
     },
   })
@@ -167,5 +161,7 @@ app.listen(PORT, () => {
   console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`   Debug: ${process.env.DEBUG === 'true' ? 'ON' : 'OFF'}`);
   console.log(`   Backend URL: ${BACKEND_URL}`);
-  console.log(`   Log Level: ${process.env.LOG_LEVEL || 'info'}\n`);
+  console.log(`   Log Level: ${process.env.LOG_LEVEL || 'info'}`);
+  console.log(`   LLM Proxy mount: /api/llm -> ${BACKEND_URL}/api/llm`);
+  console.log(`   V1 Proxy mount: /api/v1 -> ${BACKEND_URL}/api/v1\n`);
 });
