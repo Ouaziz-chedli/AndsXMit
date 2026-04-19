@@ -204,7 +204,7 @@ class TestMedGemma:
         assert isinstance(emb2, list)
 
     def test_mock_analysis_first_trimester(self, reset_model):
-        """Test mock analysis returns first trimester symptoms."""
+        """Test mock analysis returns first trimester symptoms with DS markers."""
         medgemma = MedGemma(use_mock=True)
         medgemma.load()
 
@@ -212,7 +212,7 @@ class TestMedGemma:
 
         assert description.trimester == "1st"
         assert description.gestational_age_weeks == 12.0
-        assert len(description.symptoms) == 3
+        assert len(description.symptoms) >= 3  # DS mock has NT, nasal bone, cardiac + ductus
 
         # Check for expected first trimester symptoms
         symptom_types = [s.type for s in description.symptoms]
@@ -220,8 +220,11 @@ class TestMedGemma:
         assert "nasal_bone" in symptom_types
         assert "cardiac" in symptom_types
 
+        # Check DS risk level is set
+        assert description.ds_risk_level == "high"
+
     def test_mock_analysis_second_trimester(self, reset_model):
-        """Test mock analysis returns second trimester symptoms."""
+        """Test mock analysis returns second trimester symptoms with DS markers."""
         medgemma = MedGemma(use_mock=True)
         medgemma.load()
 
@@ -229,7 +232,10 @@ class TestMedGemma:
 
         assert description.trimester == "2nd"
         assert description.gestational_age_weeks == 20.0
-        assert len(description.symptoms) == 2
+        assert len(description.symptoms) >= 2  # DS mock has nasal bone, cardiac + femur
+
+        # Check DS risk level is set
+        assert description.ds_risk_level == "high"
 
     def test_mock_analysis_third_trimester(self, reset_model):
         """Test mock analysis returns third trimester symptoms."""
