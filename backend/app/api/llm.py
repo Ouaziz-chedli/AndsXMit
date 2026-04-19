@@ -53,7 +53,7 @@ async def chat(request: ChatRequest):
             )
 
         if DEBUG:
-            logger.info(f"[LLM] Calling Ollama chat with model={client.model_name}")
+            logger.info(f"[LLM] Calling Ollama chat with model={client.model}")
 
         response = await client.chat(
             message=request.message,
@@ -66,7 +66,7 @@ async def chat(request: ChatRequest):
 
         return ChatResponse(
             response=response,
-            model=client.model_name,
+            model=client.model,
         )
 
     except HTTPException:
