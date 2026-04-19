@@ -58,12 +58,14 @@ class SymptomDescription:
     overall: str
     trimester: Optional[str] = None
     gestational_age_weeks: Optional[float] = None
+    ds_risk_level: Optional[str] = None  # "high", "moderate", "low"
 
     @property
     def symptom_text(self) -> str:
         """Human-readable summary for embedding and display."""
-        parts = [f"{s.type}={s.value}" for s in self.symptoms]
-        return f"Symptoms: {', '.join(parts)}. {self.overall}"
+        parts = [f"{s.type}={s.value}({s.assessment})" for s in self.symptoms]
+        risk = f" [DS Risk: {self.ds_risk_level}]" if self.ds_risk_level else ""
+        return f"Symptoms: {', '.join(parts)}. {self.overall}{risk}"
 
 
 class MedGemmaError(Exception):
@@ -72,25 +74,66 @@ class MedGemmaError(Exception):
 
 
 # System prompt for symptom extraction
-SYMPTOM_EXTRACTION_PROMPT = """You are an expert prenatal ultrasound interpreter. Analyze the ultrasound image and extract structured symptoms.
+SYMPTOM_EXTRACTION_PROMPT = """You are an expert prenatal ultrasound interpreter specializing in first-trimester chromosomal abnormality screening, particularly Down Syndrome (Trisomy 21).
 
-For each symptom found, provide:
-- type: The type of finding (e.g., nuchal_translucency, nasal_bone, cardiac, femur_length)
-- value: The measured/found value (e.g., "2.5mm", "present", "normal")
-- assessment: Your assessment (normal, elevated, low, absent, present, anomalous)
-- normal_range: The expected normal range if applicable
+## DOWN SYNDROME MARKERS - CRITICAL ASSESSMENT
 
-Also provide an overall assessment of the ultrasound.
+Down Syndrome detection relies on specific marker combinations. You MUST assess each of these:
 
-Format your response as JSON with this structure:
+### 1. Nuchal Translucency (NT)
+- Normal: <3.0mm (low risk)
+- Borderline: 3.0-3.5mm (moderate risk)
+- Elevated: >3.5mm (HIGH RISK for Trisomy 21)
+- CRITICAL: Even values 2.5-3.0mm should be flagged if other markers are present
+
+### 2. Nasal Bone
+- Present: Normal (low risk)
+- Hypoplastic: MODERATE RISK marker for DS
+- Absent: HIGHLY SPECIFIC marker for DS (even isolated)
+
+### 3. Cardiac Findings
+- Normal four-chamber: Expected in low-risk
+- Tricuspid regurgitation: DS marker
+- Ventricular septal defect (VSD): DS marker
+- Endocardial cushion defect (AVSD): HIGHLY SPECIFIC for DS
+- Right aortic arch: DS-associated
+
+### 4. Ductus Venosus
+- Normal: Low risk
+- Reversed A-wave: DS marker
+
+## OUTPUT FORMAT
+Return JSON with clinical interpretation, not just raw measurements:
+
 {
     "symptoms": [
-        {"type": "...", "value": "...", "assessment": "...", "normal_range": "..."}
+        {
+            "type": "nuchal_translucency",
+            "value": "3.2mm",
+            "assessment": "elevated",  <- Use RISK-based assessment, not just "normal"
+            "normal_range": "<3.0mm low risk, >3.5mm high risk",
+            "confidence": 0.92,
+            "ds_marker": true
+        },
+        {
+            "type": "nasal_bone",
+            "value": "absent",
+            "assessment": "absent",
+            "normal_range": "should be present",
+            "confidence": 0.95,
+            "ds_marker": true
+        }
     ],
-    "overall": "Your overall interpretation"
+    "overall": "RISK ASSESSMENT: [High/Moderate/Low] - specific markers present: [list]",
+    "ds_risk_level": "high"  <- THIS IS CRITICAL
 }
 
-Focus on markers relevant to prenatal screening: nuchal translucency, nasal bone, cardiac structure, femur length, etc."""
+## IMPORTANT
+- DO NOT just report values as "normal" when at upper limits of normal
+- For first trimester (11-14 weeks), err on the side of flagging borderline findings
+- Combined markers multiply risk: elevated NT + absent nasal bone = very high risk
+- Use words like "concerning", "elevated", "absent", "abnormal" when findings are DS-associated
+- High confidence (>0.9) should be reported for clear findings"""
 
 
 def parse_medgemma_response(response: str) -> SymptomDescription:
@@ -130,6 +173,7 @@ def parse_medgemma_response(response: str) -> SymptomDescription:
             overall=data.get("overall", "No overall assessment provided"),
             trimester=None,  # Set by caller
             gestational_age_weeks=None,  # Set by caller
+            ds_risk_level=data.get("ds_risk_level"),  # Extract DS risk level
         )
     except json.JSONDecodeError as e:
         raise MedGemmaError(f"Failed to parse MedGemma response: {e}")
@@ -409,62 +453,84 @@ class MedGemma:
         """
         Mock analysis for testing when Ollama is unavailable.
 
+        Returns realistic DS marker patterns for proper pipeline testing.
+        Uses elevated NT + absent nasal bone as the primary mock DS pattern.
+
         Args:
             trimester: Trimester context
 
         Returns:
-            Mock SymptomDescription
+            Mock SymptomDescription with DS-risk findings
         """
         if trimester == "1st":
+            # Mock DS-positive case: elevated NT + absent nasal bone
+            # This mimics the ds_pos_001 pattern from mock_cases/down_syndrome_1st.json
             return SymptomDescription(
                 symptoms=[
                     Symptom(
                         type="nuchal_translucency",
-                        value="2.5mm",
-                        assessment="normal",
-                        normal_range="1.5-2.5mm",
+                        value="3.2mm",
+                        assessment="elevated",
+                        normal_range="<3.0mm low risk, >3.5mm high risk",
                         confidence=0.92,
                     ),
                     Symptom(
                         type="nasal_bone",
-                        value="present",
-                        assessment="normal",
-                        normal_range="present",
+                        value="absent",
+                        assessment="absent",
+                        normal_range="should be present",
                         confidence=0.95,
                     ),
                     Symptom(
                         type="cardiac",
-                        value="four_chamber_normal",
-                        assessment="normal",
-                        normal_range="four_chamber_visible",
+                        value="tricuspid_regurgitation",
+                        assessment="abnormal",
+                        normal_range="four_chamber_normal",
                         confidence=0.88,
                     ),
+                    Symptom(
+                        type="ductus_venosus",
+                        value="reversed_a_wave",
+                        assessment="abnormal",
+                        normal_range="normal",
+                        confidence=0.85,
+                    ),
                 ],
-                overall="Normal first-trimester ultrasound with no apparent markers",
+                overall="RISK ASSESSMENT: High - Classic Trisomy 21 markers: elevated NT (3.2mm), absent nasal bone with tricuspid regurgitation and abnormal ductus venosus",
                 trimester="1st",
                 gestational_age_weeks=12.0,
+                ds_risk_level="high",
             )
         elif trimester == "2nd":
+            # 2nd trimester DS markers: cardiac defects, absent nasal bone
             return SymptomDescription(
                 symptoms=[
                     Symptom(
-                        type="cardiac",
-                        value="normal_four_chamber",
-                        assessment="normal",
-                        normal_range="four_chamber_present",
+                        type="nasal_bone",
+                        value="absent",
+                        assessment="absent",
+                        normal_range="should be present by 2nd trimester",
                         confidence=0.94,
                     ),
                     Symptom(
+                        type="cardiac",
+                        value="ventricular_septal_defect",
+                        assessment="abnormal",
+                        normal_range="four_chamber_normal",
+                        confidence=0.89,
+                    ),
+                    Symptom(
                         type="femur_length",
-                        value="45mm",
-                        assessment="normal",
-                        normal_range="40-50mm at 20w",
-                        confidence=0.91,
+                        value="42mm",
+                        assessment="short",
+                        normal_range="45-55mm at 20w",
+                        confidence=0.87,
                     ),
                 ],
-                overall="Normal second-trimester ultrasound",
+                overall="RISK ASSESSMENT: High - Second trimester DS markers: absent nasal bone, VSD, short femur",
                 trimester="2nd",
                 gestational_age_weeks=20.0,
+                ds_risk_level="high",
             )
         else:  # 3rd trimester
             return SymptomDescription(
@@ -484,9 +550,10 @@ class MedGemma:
                         confidence=0.92,
                     ),
                 ],
-                overall="Normal third-trimester ultrasound",
+                overall="Normal third-trimester ultrasound - DS screening should be done in 1st/2nd trimester",
                 trimester="3rd",
                 gestational_age_weeks=32.0,
+                ds_risk_level="low",
             )
 
     def embed_image(self, image_bytes: bytes) -> List[float]:

@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const { createProxyMiddleware } = require('http-proxy-middleware');
+const http = require('http');
 const { loggerMiddleware, errorLogger, requestIdMiddleware } = require('./middleware/logger');
 const authRoutes = require('./routes/auth.js');
 const userRoutes = require('./routes/user.js');
@@ -71,32 +72,74 @@ app.use(
   })
 );
 
-app.use(
-  '/api/llm',
-  createProxyMiddleware({
-    target: BACKEND_URL,
-    changeOrigin: true,
-    pathRewrite: (path) => {
-      // path is the portion after /api/llm, e.g., /chat
-      const rewritten = `/api/llm${path}`;
-      console.log(`[LLM-PROXY] pathRewrite: received path="${path}" -> rewritten="${rewritten}"`);
-      return rewritten;
+// LLM Chat endpoint - direct handler to avoid http-proxy-middleware issues
+// with FastAPI's async responses
+app.post('/api/llm/chat', async (req, res) => {
+  const requestId = req.requestId || `req-${Date.now()}`;
+  const startTime = Date.now();
+
+  console.log(`[LLM-DIRECT] ${req.method} /api/llm/chat - requestId: ${requestId}`);
+
+  // req.body should be parsed by express.json() middleware
+  const parsedBody = req.body || {};
+  console.log(`[LLM-DIRECT] Body keys: ${Object.keys(parsedBody).join(', ')}`);
+
+  const data = JSON.stringify(parsedBody);
+  const options = {
+    hostname: 'backend',
+    port: 8000,
+    path: '/api/llm/chat',
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(data),
+      'X-Request-ID': requestId,
+      'X-Forwarded-For': req.ip,
+      'Connection': 'close',
     },
-    onProxyReq: (proxyReq, req) => {
-      console.log(`[LLM-PROXY] onProxyReq: ${req.method} ${req.originalUrl} -> ${BACKEND_URL}${proxyReq.path}`);
-      if (req.requestId) {
-        proxyReq.setHeader('X-Request-ID', req.requestId);
+    agent: false,  // Disable connection pooling to avoid socket issues
+  };
+
+  console.log(`[LLM-DIRECT] Forwarding to ${BACKEND_URL}/api/llm/chat, body size: ${Buffer.byteLength(data)} bytes`);
+
+  const proxyReq = http.request(options, (proxyRes) => {
+    console.log(`[LLM-DIRECT] Backend response: ${proxyRes.statusCode} in ${Date.now() - startTime}ms`);
+
+    // Collect response data
+    const chunks = [];
+    proxyRes.on('data', (chunk) => {
+      chunks.push(chunk);
+    });
+    proxyRes.on('end', () => {
+      const body = Buffer.concat(chunks).toString();
+      console.log(`[LLM-DIRECT] Response complete: ${body.length} chars in ${Date.now() - startTime}ms`);
+      try {
+        const parsed = JSON.parse(body);
+        res.status(proxyRes.statusCode).json(parsed);
+      } catch (e) {
+        res.status(proxyRes.statusCode).send(body);
       }
-    },
-    onProxyRes: (proxyRes, req) => {
-      console.log(`[LLM-PROXY] onProxyRes: Response ${proxyRes.statusCode} for ${req.method} ${req.originalUrl}`);
-    },
-    onError: (err, req, res) => {
-      console.error(`[LLM-PROXY] onError: ${req.method} ${req.originalUrl} - ${err.message}`);
-      res.status(502).json({ error: 'Proxy error', detail: err.message });
-    },
-  })
-);
+    });
+  });
+
+  proxyReq.on('error', (err) => {
+    console.error(`[LLM-DIRECT] Error: ${err.message} after ${Date.now() - startTime}ms`);
+    res.status(502).json({ error: 'Proxy error', detail: err.message });
+  });
+
+  proxyReq.on('timeout', () => {
+    console.error(`[LLM-DIRECT] Request timeout after ${Date.now() - startTime}ms`);
+    proxyReq.destroy();
+    res.status(504).json({ error: 'Gateway timeout', detail: 'Backend did not respond in time' });
+  });
+
+  proxyReq.setTimeout(120000);  // 120 second timeout for MedGemma
+
+  proxyReq.write(data);
+  proxyReq.end();
+
+  console.log(`[LLM-DIRECT] Request sent, waiting for response...`);
+});
 
 app.use(
   '/api/rag',
